@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib
 #matplotlib.use('Agg')
 from matplotlib.pyplot import plot,savefig
+from matplotlib import pyplot as plt
+
 pd.set_option('display.width', 800)
 
 
@@ -121,7 +123,7 @@ print Labeled['multi_class'].value_counts()
 print "-" * 20,"Qcut multi class distribution","-" * 20
 
 
-Labeled['act_return'] = Labeled['class'] * Labeled['return'] #实际回报是涨跌都取绝对值了，也就是说跌也赚钱的假设吗？
+Labeled['act_return'] = Labeled['class'] * Labeled['return']                                                            #实际回报是涨跌都取绝对值了，也就是说跌也赚钱的假设吗？
 print Labeled['act_return'].head(10)
 print "-" * 20,"Acture return from labeled class","-" * 20
 
@@ -137,17 +139,17 @@ from sklearn.metrics import classification_report,confusion_matrix
 print "*" * 50,"Data prepare over and todo basic predict","*" * 50
 
 logreg = linear_model.LogisticRegression(C=1e5)
-res = logreg.fit(InputDF[:-test_size],Labeled['multi_class'][:-test_size]) #取除了最后600个外的数据做测试集,multi class是按收益排序分段泛化的结果集合
+res = logreg.fit(InputDF[:-test_size],Labeled['multi_class'][:-test_size])                                              #取除了最后600个外的数据做测试集,multi class是按收益排序分段泛化的结果集合
 print Labeled['multi_class'][:-test_size].head(10)
 print InputDF[:-test_size].head(10)
 print "-" * 20, "Input & target sample for log regress", "-" * 20
 
-print(classification_report(Labeled['multi_class'][-test_size:],res.predict(InputDF[-test_size:]))) #使用最后600个做测试
+print(classification_report(Labeled['multi_class'][-test_size:],res.predict(InputDF[-test_size:])))                     #使用最后600个做测试
 print "-" * 20,"lassification report","-" * 20
 print(confusion_matrix(Labeled['multi_class'][-test_size:],res.predict(InputDF[-test_size:])))
 print res.predict(InputDF)
 print "-" * 20,"Confusion matrix 1","-" * 20
-Labeled['predicted_action'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,res.predict(InputDF))) #分三段
+Labeled['predicted_action'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,res.predict(InputDF)))                #分三段
 print Labeled['predicted_action'].head(10)
 print "-" * 20,"Predicted action","-" * 20
 print(confusion_matrix(Labeled['class'][-test_size:],Labeled['predicted_action'][-test_size:]))
@@ -188,12 +190,12 @@ print len(InputDF)
 
 class Model():
     def __init__(self):
-        global_step = tf.contrib.framework.get_or_create_global_step()
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, num_features])
+        global_step = tf.contrib.framework.get_or_create_global_step()                                                  #变量用于保存全局训练步骤（global training step）的数值
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, num_features])                                  #占位符都是由外部输入替代的，None 表示不确定
         self.target_data = tf.placeholder(dtype=tf.int32, shape=[None])
         self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[])
         with tf.variable_scope("ff"):
-            droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
+            droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)                                  #为了减少过拟合，我们在输入层之前加入dropout。我们用一个placeholder来代表一个神经元的输出在dropout中保持不变的概率。这样我们可以在训练过程中启用dropout，在测试过程中关闭dropout
 
             layer_1 = tf.contrib.layers.fully_connected(
                 num_outputs=hidden_1_size,
@@ -208,31 +210,31 @@ class Model():
                 activation_fn=None,
                 inputs=layer_2,
             )
-        with tf.variable_scope("loss"):
-            self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)#???
+        with tf.variable_scope("loss"):                                                                                 #变量的分级命名
+            self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy
             mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
             mask = tf.cast(mask, tf.float32)
             self.loss = tf.reduce_sum(self.losses)
-
-        with tf.name_scope("train"):
-            opt = tf.train.AdamOptimizer(lr)
+        #scope生成的数据流图具有层次化;
+        with tf.name_scope("train"):                                                                                    #找到对于各个变量的损失的梯度值
+            opt = tf.train.AdamOptimizer(lr)                                                                            #lr学习率;adam梯度随机优化算法
             gvs = opt.compute_gradients(self.loss)
             self.train_op = opt.apply_gradients(gvs, global_step=global_step)
 
-        with tf.name_scope("predictions"):
+        with tf.name_scope("predictions"):                                                                              #评估模型
             self.probs = tf.nn.softmax(self.logits)
             self.predictions = tf.argmax(self.probs, 1)
             correct_pred = tf.cast(tf.equal(self.predictions, tf.cast(self.target_data, tf.int64)), tf.float64)
             self.accuracy = tf.reduce_mean(correct_pred)
 
 
-with tf.Graph().as_default():
+with tf.Graph().as_default():                                                                                           #默认的tf.Graph全局实例关联起来
     model = Model()
     input_ = train[0]
     target = train[1]
     with tf.Session() as sess:
-        init = tf.global_variables_initializer()
-        sess.run([init])
+        init = tf.global_variables_initializer()                        #必须首先初始化
+        sess.run([init])                                                #这里session 只执行初始化
         epoch_loss = 0
         for e in range(NUM_EPOCHS):
             if epoch_loss > 0 and epoch_loss < 1:
@@ -241,13 +243,13 @@ with tf.Graph().as_default():
             for batch in range(0, NUM_TRAIN_BATCHES):
                 start = batch * BATCH_SIZE
                 end = start + BATCH_SIZE
-                feed = {
+                feed = {                                                #反馈字典-对应占位符（变量）
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
-                    model.dropout_prob: 0.9
+                    model.dropout_prob: 0.9                             #防止过拟合，随机剪枝，进化
                 }
 
-                _, loss, acc = sess.run(
+                _, loss, acc = sess.run(                                #train op ， loss （the loss between prediction and real data  ）必须给出
                     [
                         model.train_op,
                         model.loss,
@@ -258,7 +260,8 @@ with tf.Graph().as_default():
                 epoch_loss += loss
             print('step - {0} loss - {1} acc - {2}'.format((1 + batch + NUM_TRAIN_BATCHES * e), epoch_loss, acc))
 
-        print('done training')
+        print("*" * 20,'Done training',"*" * 20)
+
         final_preds = np.array([])
         final_probs = None
         for batch in range(0, NUM_VAL_BATCHES):
@@ -319,7 +322,7 @@ FIRST_LAYER_SIZE=1000
 SECOND_LAYER_SIZE=250
 NUM_LAYERS=2
 BATCH_SIZE=50
-NUM_EPOCHS=20
+NUM_EPOCHS=200
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
@@ -475,7 +478,7 @@ print(confusion_matrix(Result['class'],Result['mod_rnn_prod']))
 print "-" * 20,"Confusion matrix2","-" * 20
 
 Res = (Result[-test_size:][['return','nn_ret','rnn_ret','pred_return']]).cumsum()
-print "-" * 20,"Return & nn_ret & rnn_ret & pred_return","-" * 20
+print "-" * 20,"Return & nn_ret & rnn_ret & pred_return cumsum","-" * 20
 
 Res[0] =0
 Res.plot(figsize=(20,10))
@@ -487,5 +490,3 @@ Res.plot(figsize=(20,10),title="Performance of MarketVectors algo over 27 months
 Res.columns
 Res.columns =['baseline','logistic_regression','feed_forward_net','rnn_net','do_nothing']
 Res.plot(figsize=(20,10))
-
-plot.draw()
