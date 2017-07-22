@@ -3,8 +3,9 @@ import pandas as pd
 import os
 import sys
 import numpy as np
+
 import matplotlib
-#matplotlib.use('Agg')
+matplotlib.use('Agg')
 from matplotlib.pyplot import plot,savefig
 from matplotlib import pyplot as plt
 
@@ -55,7 +56,7 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 10:
+    if idx == 10000:
         break;
 print Final.head(10)
 print "-" * 20,"Muti-stock table","-" * 20
@@ -159,7 +160,7 @@ print Labeled['pred_return'].head(10)
 print "-" * 20,"Predict return","-" * 20
 
 Res = Labeled[-test_size:][['return','act_return','pred_return']].cumsum()
-print Res.head(10)
+print Res.tail(10)
 print "-" * 20,"Predict return & act_return & pred_return cumsum ","-" * 20
 
 Res[0] =0
@@ -177,7 +178,7 @@ dropout=0.2
 hidden_1_size = 1000
 hidden_2_size = 250
 num_classes = Labeled.tf_class.nunique()
-NUM_EPOCHS=100 #
+NUM_EPOCHS=200 #
 BATCH_SIZE=50
 lr=0.0001
 
@@ -211,18 +212,20 @@ class Model():
                 inputs=layer_2,
             )
         with tf.variable_scope("loss"):                                                                                 #变量的分级命名
-            self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy
+            self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy,首先看输入logits，它的shape是[batch_size, num_classes] ，一般来讲，就是神经网络最后一层的输入z
             mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
             mask = tf.cast(mask, tf.float32)
-            self.loss = tf.reduce_sum(self.losses)
+            self.loss = tf.reduce_sum(self.losses * mask)/tf.reduce_sum(mask)
+            #self.loss = tf.reduce_sum(self.losses)
+
         #scope生成的数据流图具有层次化;
         with tf.name_scope("train"):                                                                                    #找到对于各个变量的损失的梯度值
             opt = tf.train.AdamOptimizer(lr)                                                                            #lr学习率;adam梯度随机优化算法
             gvs = opt.compute_gradients(self.loss)
             self.train_op = opt.apply_gradients(gvs, global_step=global_step)
 
-        with tf.name_scope("predictions"):                                                                              #评估模型
-            self.probs = tf.nn.softmax(self.logits)
+        with tf.name_scope("predictions"):                                                                              #评估模型,
+            self.probs = tf.nn.softmax(self.logits)                                                                     #多分类问题上指定某个类别的概率值，Softmax比较合适。即使后面我们要去训练更复杂的模型，最后一层依然是Softmax
             self.predictions = tf.argmax(self.probs, 1)
             correct_pred = tf.cast(tf.equal(self.predictions, tf.cast(self.target_data, tf.int64)), tf.float64)
             self.accuracy = tf.reduce_mean(correct_pred)
@@ -233,8 +236,8 @@ with tf.Graph().as_default():                                                   
     input_ = train[0]
     target = train[1]
     with tf.Session() as sess:
-        init = tf.global_variables_initializer()                        #必须首先初始化
-        sess.run([init])                                                #这里session 只执行初始化
+        init = tf.global_variables_initializer()                                                                        #必须首先初始化
+        sess.run([init])                                                                                                #这里session 只执行初始化
         epoch_loss = 0
         for e in range(NUM_EPOCHS):
             if epoch_loss > 0 and epoch_loss < 1:
@@ -243,13 +246,13 @@ with tf.Graph().as_default():                                                   
             for batch in range(0, NUM_TRAIN_BATCHES):
                 start = batch * BATCH_SIZE
                 end = start + BATCH_SIZE
-                feed = {                                                #反馈字典-对应占位符（变量）
+                feed = {                                                                                                #反馈字典-对应占位符（变量）
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
-                    model.dropout_prob: 0.9                             #防止过拟合，随机剪枝，进化
+                    model.dropout_prob: 0.9                                                                             #防止过拟合，随机剪枝，进化
                 }
 
-                _, loss, acc = sess.run(                                #train op ， loss （the loss between prediction and real data  ）必须给出
+                _, loss, acc = sess.run(                                                                                #train op ， loss （the loss between prediction and real data  ）必须给出
                     [
                         model.train_op,
                         model.loss,
@@ -282,21 +285,23 @@ with tf.Graph().as_default():                                                   
                 ]
                 , feed_dict=feed
             )
-            print(acc)
+            print("*" * 20, 'Acc',acc, "*" * 20,NUM_VAL_BATCHES,batch)
             final_preds = np.concatenate((final_preds, preds), axis=0)
             if final_probs is None:
                 final_probs = probs
             else:
                 final_probs = np.concatenate((final_probs, probs), axis=0)
         prediction_conf = final_probs[np.argmax(final_probs, 1)]
+        print("*" * 20, prediction_conf, "*" * 20)
 
-print "*" * 20,"Train over","*" * 20
+print "*" * 20,"Prediction over","*" * 20
 Result = Labeled[-test_size:].copy()
 Result['nn_pred'] = final_preds
 Result['mod_nn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
 Result['nn_ret'] = Result.mod_nn_prod*Result['return']
 Res = Result[-test_size:][['return','act_return','nn_ret','pred_return']].cumsum()
-print "*" * 20,"NN predict return","*" * 20
+print Res.tail(10)
+print "*" * 20,"NN predict return cumsum","*" * 20
 
 #Res = Result[-test_size:][['return','act_return','pred_return','nn_ret']].cumsum()
 #Res = (1+Result[-test_size:][['return','act_return','nn_ret','pred_return']]).cumprod()
@@ -306,11 +311,15 @@ print(confusion_matrix(Result['class'],Result['mod_nn_prod']))
 print "-" * 20,"Confusion matrix","-" * 20
 
 print(classification_report(Result['class'],Result['mod_nn_prod']))
-cm = pd.DataFrame(confusion_matrix(Result['multi_class'],Result['nn_pred']))
 print "-" * 20,"Classification report","-" * 20
+
+cm = pd.DataFrame(confusion_matrix(Result['multi_class'],Result['nn_pred']))
 #sns.heatmap(cm.div(cm.sum(1)))
+
 Result[Result.multi_class==6]['return'].hist()
 print(classification_report(Result['multi_class'],Result['nn_pred']))
+print "-" * 20,"Classification report2","-" * 20
+
 #Result.hist(by='multi_class',column='return',sharex=True) ## fix higer pandas
 
 
@@ -478,6 +487,7 @@ print(confusion_matrix(Result['class'],Result['mod_rnn_prod']))
 print "-" * 20,"Confusion matrix2","-" * 20
 
 Res = (Result[-test_size:][['return','nn_ret','rnn_ret','pred_return']]).cumsum()
+print Res.tail(10)
 print "-" * 20,"Return & nn_ret & rnn_ret & pred_return cumsum","-" * 20
 
 Res[0] =0

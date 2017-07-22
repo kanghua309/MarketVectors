@@ -32,7 +32,7 @@ from matplotlib import pyplot as plt
 random_image = np.random.random([500, 500])
 print(random_image)
 plt.ion()
-#plt.ioff()
+plt.ioff()
 print "------------------------1"
 
 plt.imshow(random_image, cmap='gray')
