@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+#https://gist.github.com/3h4/21a87386dbc1ee1fae7368832c05d6e3
 from __future__ import print_function, division
 import numpy as np
 import tensorflow as tf
@@ -15,16 +17,15 @@ num_classes = 2
 echo_step = 3
 batch_size = 5
 num_batches = total_series_length // batch_size // truncated_backprop_length
-num_layers = 3
+num_layers = 3 #3
 
 
 def generateData():
     x = np.array(np.random.choice(2, total_series_length, p=[0.5, 0.5]))
-    y = np.roll(x, echo_step)
+    y = np.roll(x, echo_step)                                                                                           # 回声错位
     y[0:echo_step] = 0
-
     x = x.reshape((batch_size, -1))  # The first index changing slowest, subseries as rows
-    y = y.reshape((batch_size, -1))
+    y = y.reshape((batch_size, -1))                                                                                     # 分成⑤批次
 
     return (x, y)
 
@@ -32,7 +33,7 @@ def generateData():
 batchX_placeholder = tf.placeholder(tf.float32, [batch_size, truncated_backprop_length])
 batchY_placeholder = tf.placeholder(tf.int32, [batch_size, truncated_backprop_length])
 
-init_state = tf.placeholder(tf.float32, [num_layers, 2, batch_size, state_size])
+init_state = tf.placeholder(tf.float32, [num_layers, 2, batch_size, state_size])                                        #rnn 多了个状态？
 
 state_per_layer_list = tf.unstack(init_state, axis=0)
 rnn_tuple_state = tuple(
@@ -40,26 +41,34 @@ rnn_tuple_state = tuple(
      for idx in range(num_layers)]
 )
 
+'''
 W = tf.Variable(np.random.rand(state_size + 1, state_size), dtype=tf.float32)
 b = tf.Variable(np.zeros((1, state_size)), dtype=tf.float32)
+'''
 
 W2 = tf.Variable(np.random.rand(state_size, num_classes), dtype=tf.float32)
 b2 = tf.Variable(np.zeros((1, num_classes)), dtype=tf.float32)
 
 # Forward passes
-cell = tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple=True)
-cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+
+def my_cell():
+    return tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple=True)                                                     #三层RNN网络，不含输入输出吧
+#cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers, state_is_tuple=True)
+cell = tf.nn.rnn_cell.MultiRNNCell([my_cell() for _ in range(num_layers)], state_is_tuple=True)
+
 states_series, current_state = tf.nn.dynamic_rnn(cell, tf.expand_dims(batchX_placeholder, -1),
                                                  initial_state=rnn_tuple_state)
 states_series = tf.reshape(states_series, [-1, state_size])
 
-logits = tf.matmul(states_series, W2) + b2  # Broadcasted addition
+logits = tf.matmul(states_series, W2) + b2                                                                              # Broadcasted addition ; 全连接是不是隐含了该计算
 labels = tf.reshape(batchY_placeholder, [-1])
 
-logits_series = tf.unpack(tf.reshape(logits, [batch_size, truncated_backprop_length, num_classes]), axis=1)
+logits_series = tf.unstack(tf.reshape(logits, [batch_size, truncated_backprop_length, num_classes]), axis=1)
+print("---------------------------------")
+print(logits_series,len(logits_series))
 predictions_series = [tf.nn.softmax(logit) for logit in logits_series]
 
-losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits, labels)
+losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
 total_loss = tf.reduce_mean(losses)
 
 train_step = tf.train.AdagradOptimizer(0.3).minimize(total_loss)
@@ -87,7 +96,7 @@ def plot(loss_list, predictions_series, batchX, batchY):
 
 
 with tf.Session() as sess:
-    sess.run(tf.initialize_all_variables())
+    sess.run(tf.global_variables_initializer())
     plt.ion()
     plt.figure()
     plt.show()
@@ -100,7 +109,8 @@ with tf.Session() as sess:
 
         print("New data, epoch", epoch_idx)
 
-        for batch_idx in range(num_batches):
+        for batch_idx in range(num_batches):                                                                            #batch_size 和 num_batches 关系有点不清楚,感觉batchsize是行，其实是股票数，而num_batches则是按时间滑动窗
+            print("Epoch", epoch_idx," batch idx:",batch_idx," of num batches:", num_batches)
             start_idx = batch_idx * truncated_backprop_length
             end_idx = start_idx + truncated_backprop_length
 

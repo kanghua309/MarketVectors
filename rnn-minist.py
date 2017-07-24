@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 A Recurrent Neural Network (LSTM) implementation example using TensorFlow library.
 This example is using the MNIST database of handwritten digits (http://yann.lecun.com/exdb/mnist/)
@@ -29,10 +30,10 @@ batch_size = 128
 display_step = 10
 
 # Network Parameters
-n_input = 28 # MNIST data input (img shape: 28*28)
-n_steps = 28 # timesteps
-n_hidden = 128 # hidden layer num of features
-n_classes = 10 # MNIST total classes (0-9 digits)
+n_input = 28                # MNIST data input (img shape: 28*28)
+n_steps = 28                # timesteps,remember inputs from up to 28 time steps in the past
+n_hidden = 128              # hidden layer num of features
+n_classes = 10              # MNIST total classes (0-9 digits)
 
 # tf Graph input
 x = tf.placeholder("float", [None, n_steps, n_input])
@@ -54,16 +55,28 @@ def RNN(x, weights, biases):
     # Required shape: 'n_steps' tensors list of shape (batch_size, n_input)
 
     # Unstack to get a list of 'n_steps' tensors of shape (batch_size, n_input)
+    print("--------------")
+    print(x)
     x = tf.unstack(x, n_steps, 1)
-
+    print(x)
     # Define a lstm cell with tensorflow
     lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
+    '''
+    默认active是tanh，lstm cell可独立设置激活函数
+    lstm_cell = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0, activation=tf.nn.relu)
+    '''
 
     # Get lstm cell output
     outputs, states = rnn.static_rnn(lstm_cell, x, dtype=tf.float32)
 
     # Linear activation, using rnn inner loop last output
     return tf.matmul(outputs[-1], weights['out']) + biases['out']
+
+'''
+from tensorflow.python.ops.rnn_cell import Dropoutwrapper
+cells = DropoutWrapper(lstm_cell, input_keep_prob=0.5, output_keep_prob=0.5)
+http://blog.csdn.net/mydear_11000/article/details/52414342
+'''
 
 pred = RNN(x, weights, biases)
 
