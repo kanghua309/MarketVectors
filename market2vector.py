@@ -80,8 +80,15 @@ print clean_and_flat.head(10)
 target_cols = list(filter(lambda x: 'c1_c0' in x, clean_and_flat.columns.values))
 input_cols  = list(filter(lambda x: 'c1_c0' not in x, clean_and_flat.columns.values))
 print input_cols
+print "Input cols ... "
+print target_cols
+print "Target cols ..."
 InputDF = clean_and_flat[input_cols][:3900]
 TargetDF = clean_and_flat[target_cols][:3900]
+print InputDF.head(10)
+print "InputDF ..."
+print TargetDF.head(10)
+print "TargetDF ..."
 corrs = TargetDF.corr()
 
 num_stocks = len(TargetDF.columns)
@@ -364,6 +371,7 @@ class RNNModel():
         with tf.variable_scope("ff", initializer=xavier_initializer(uniform=False)):
             droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
 
+            '''                                                                                                         #no use
             layer_1 = tf.contrib.layers.fully_connected(
                 num_outputs=FIRST_LAYER_SIZE,
                 inputs=droped_input,
@@ -374,13 +382,17 @@ class RNNModel():
                 inputs=layer_1,
 
             )
+            '''
 
         split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
         split_inputs = tf.unstack(split_inputs, axis=1, name="unpack_l1")
+        print("------------------------------------------------------------")
+        print(len(split_inputs),split_inputs)
+
         states = []
         outputs = []
-        with tf.variable_scope("rnn", initializer=xavier_initializer(uniform=False)) as scope:
+        with tf.variable_scope("rnn", initializer=xavier_initializer(uniform=False)) as scope:                          #没有使用rnn这种helper函数建立 , 所以还需要通过一个循环逐次对batch中的每一行进行处理
             state = self.start_state
             for i, inp in enumerate(split_inputs):
                 if i > 0:
@@ -391,7 +403,7 @@ class RNNModel():
         self.end_state = states[-1]
         outputs = tf.stack(outputs, axis=1)  # Pack them back into a single tensor
         outputs = tf.reshape(outputs, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
-        self.logits = tf.contrib.layers.fully_connected(
+        self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
             activation_fn=None
