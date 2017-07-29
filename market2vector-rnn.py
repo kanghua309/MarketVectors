@@ -56,7 +56,7 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 10000:
+    if idx == 10:
         break;
 print Final.head(10)
 print "-" * 20,"Muti-stock table","-" * 20
@@ -118,17 +118,19 @@ print "-" * 20,"Label by return of day","-" * 20
 
 
 #Labeled['multi_class'] = pd.qcut(TotalReturn,3,labels=range(3))
-#Labeled['multi_class'] = pd.qcut(TotalReturn,11,labels=range(11))
-#print Labeled['multi_class'].head(10)
-#print "-" * 20,"Labeled of multi class","-" * 20
-
-Labeled['multi_class'] = Labeled['class'] + 1
+Labeled['multi_class'] = pd.qcut(TotalReturn,11,labels=range(11))
 print Labeled['multi_class'].head(10)
 print "-" * 20,"Labeled of multi class","-" * 20
 
+#Labeled['multi_class'] = Labeled['class'] + 1
+#print Labeled['multi_class'].head(10)
+#print "-" * 20,"Labeled of multi class","-" * 20
+
 '''
 到底应该怎么分类 ？
-排序分陈个11个桶，然后5个卖，5个买，一个不动显然不合理！ 必须规定实际return来定买和卖，相对顺序是不合适的
+排序分陈个11个桶，然后5个卖，5个买，一个不动显然不合理！ 必须规定实际return来定买和卖，相对顺序是不合适的？
+！！！
+使用相对顺序而非绝对值，是为了泛化模型吗？
 '''
 
 '''
@@ -202,7 +204,7 @@ dropout=0.5 #0.2
 hidden_1_size = 1000
 hidden_2_size = 250
 num_classes = Labeled.tf_class.nunique()
-NUM_EPOCHS=2000 #
+NUM_EPOCHS=200 #200
 BATCH_SIZE=50
 lr=0.0001
 
@@ -216,8 +218,8 @@ print Labeled['tf_class'].head(10)
 
 print num_classes
 
+'''
 print Labeled.tf_class[-test_size:].head(10)
-
 class Model():
     def __init__(self):
         global_step = tf.contrib.framework.get_or_create_global_step()                                                  #变量用于保存全局训练步骤（global training step）的数值
@@ -243,7 +245,7 @@ class Model():
         with tf.variable_scope("loss"):                                                                                 #变量的分级命名
             self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy,首先看输入logits，它的shape是[batch_size, num_classes] ，一般来讲，就是神经网络最后一层的输入;sparse 代表无需再转为one hot编码
 
-            #mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
+            mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
             mask = tf.cast(mask, tf.float32)
             #self.loss = tf.reduce_sum(self.losses * mask)/tf.reduce_sum(mask)                                          #mask 是干嘛的？
             self.loss = tf.reduce_sum(self.losses)
@@ -261,11 +263,12 @@ class Model():
             self.accuracy = tf.reduce_mean(correct_pred)
 
 
+
 with tf.Graph().as_default():                                                                                           #默认的tf.Graph全局实例关联起来
     model = Model()
     input_ = train[0]
     target = train[1]
-    with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False,allow_soft_placement=True)) as sess:
         init = tf.global_variables_initializer()                                                                        #必须首先初始化
         sess.run([init])                                                                                                #这里session 只执行初始化
         epoch_loss = 0
@@ -280,7 +283,7 @@ with tf.Graph().as_default():                                                   
                 feed = {                                                                                                #反馈字典-对应占位符（变量）
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
-                    model.dropout_prob: 0.1                                                                             #防止过拟合，随机剪枝，进化； 1.0代表完全保留
+                    model.dropout_prob: 0.5                                                                            #防止过拟合，随机剪枝，进化； 1.0代表完全保留
                 }
 
                 _, loss, acc = sess.run(                                                                                #train op ， loss （the loss between prediction and real data  ）必须给出
@@ -304,7 +307,7 @@ with tf.Graph().as_default():                                                   
             feed = {
                 model.input_data: val[0][start:end],
                 model.target_data: val[1][start:end],
-                model.dropout_prob: 1
+                model.dropout_prob: 1                                                                                   #测试验证是dropout 为1
             }
 
             acc, preds, probs = sess.run(
@@ -334,13 +337,13 @@ with tf.Graph().as_default():                                                   
 
 Result = Labeled[-test_size:].copy()
 Result['nn_pred'] = final_preds
-#Result['mod_nn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
-Result['mod_nn_prod']  = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))                #分三段
+Result['mod_nn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
+#Result['mod_nn_prod']  = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))                #分三段
 #print Result['mod_nn_prod'].tail(10)
 #print Result['nn_pred'].head(10)
 Result['nn_ret'] = Result.mod_nn_prod*Result['return']
-Res = Result[-test_size:][['return','act_return','nn_ret']].cumsum()
-#Res = Result[-test_size:][['return','act_return','nn_ret','pred_return']].cumsum()
+#Res = Result[-test_size:][['return','act_return','nn_ret']].cumsum()
+Res = Result[-test_size:][['return','act_return','nn_ret','pred_return']].cumsum()
 print Res.tail(10)
 print "*" * 20,"NN predict return cumsum","*" * 20
 
@@ -365,7 +368,7 @@ print "-" * 20,"Classification report2","-" * 20
 
 #Result.hist(by='multi_class',column='return',sharex=True) ## fix higer pandas
 
-
+'''
 print "*" * 50,"Training a rnn network","*" * 50
 
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
@@ -374,7 +377,7 @@ FIRST_LAYER_SIZE=1000
 SECOND_LAYER_SIZE=250
 NUM_LAYERS=2
 BATCH_SIZE=50
-NUM_EPOCHS=200
+NUM_EPOCHS=200 #200
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
@@ -382,15 +385,17 @@ ATTN_LENGTH=30
 beta=0
 
 
+print num_features #42
+
 class RNNModel():
     def __init__(self):
         global_step = tf.contrib.framework.get_or_create_global_step()
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[BATCH_SIZE, num_features])
-        self.target_data = tf.placeholder(dtype=tf.int32, shape=[BATCH_SIZE])
-        self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[])
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[BATCH_SIZE, num_features],name = "input")
+        self.target_data = tf.placeholder(dtype=tf.int32, shape=[BATCH_SIZE],name = "target")
+        self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[],name = "dropout")
 
         def makeGRUCells():
-            base_cell = tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, )
+            #base_cell = tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, )
             #layered_cell = tf.nn.rnn_cell.MultiRNNCell([base_cell] * NUM_LAYERS, state_is_tuple=False)
             layered_cell = tf.nn.rnn_cell.MultiRNNCell(
                 [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
@@ -400,14 +405,19 @@ class RNNModel():
             return attn_cell
 
         self.gru_cell = makeGRUCells()
-        self.zero_state = self.gru_cell.zero_state(1, tf.float32)
+        #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
+        self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
 
-        self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
+        #init_state = tf.zeros([BATCH_SIZE, NUM_LAYERS * RNN_HIDDEN_SIZE], name="Initial_State_Placeholder")  # <---------
 
+        self.start_state = tf.placeholder(dtype=tf.float32,
+                                          shape=[BATCH_SIZE, self.gru_cell.state_size],
+                                          name = "state")
+        '''
         with tf.variable_scope("ff", initializer=xavier_initializer(uniform=False)):
             droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
 
-                                                                                                         #no use
+                                                                                             #no use
             layer_1 = tf.contrib.layers.fully_connected(
                 num_outputs=FIRST_LAYER_SIZE,
                 inputs=droped_input,
@@ -418,8 +428,21 @@ class RNNModel():
                 inputs=layer_1,
 
             )
-            
+        '''
+        #split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],name="reshape_l1")
+        #print split_inputs
 
+
+        #rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_frames, frame_length))
+
+        #X = tf.reshape(self.input_data, [-1, BATCH_SIZE, self.gru_cell.state_size])
+
+        states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,
+                                                         inputs=tf.expand_dims(self.input_data, -1),
+                                                         initial_state=self.zero_state,
+                                                         time_major=False
+                                                         )
+        '''
         split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
         split_inputs = tf.unstack(split_inputs, axis=1, name="unpack_l1")
@@ -438,6 +461,13 @@ class RNNModel():
         self.end_state = states[-1]
         outputs = tf.stack(outputs, axis=1)  # Pack them back into a single tensor
         outputs = tf.reshape(outputs, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
+        '''
+        states_series = tf.reshape(states_series, [-1, RNN_HIDDEN_SIZE])
+
+        #states_series = tf.reshape(states_series, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
+        outputs = states_series
+        self.end_state = current_state[-1][1]
+
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
@@ -464,20 +494,28 @@ class RNNModel():
 
 
 with tf.Graph().as_default():
+    print "--------------------------------------1"
+
     model = RNNModel()
+    print "--------------------------------------12"
+
     input_ = train[0]
     target = train[1]
-    with tf.Session() as sess:
+    with tf.Session(config=tf.ConfigProto(log_device_placement=False,allow_soft_placement=True)) as sess:
         init = tf.global_variables_initializer()
         sess.run([init])
         loss = 2000
 
         for e in range(NUM_EPOCHS):
             state = sess.run(model.zero_state)
+            print state
+            print "--------------------------------------"
             epoch_loss = 0
             for batch in range(0, NUM_TRAIN_BATCHES):
                 start = batch * BATCH_SIZE
                 end = start + BATCH_SIZE
+                print "-------------",start,end
+
                 feed = {
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
@@ -520,8 +558,12 @@ with tf.Graph().as_default():
 
 print "*" * 20,"Train over","*" * 20
 
+'''
 Result['rnn_pred'] = final_preds
-Result['mod_rnn_prod'] = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))
+#Result['mod_rnn_prod'] = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))
+Result['mod_rnn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
+
+
 Result['rnn_ret'] = Result.mod_rnn_prod*Result['return']
 
 print(confusion_matrix(Result['multi_class'],Result['rnn_pred']))
@@ -547,3 +589,4 @@ Res.plot(figsize=(20,10),title="Performance of MarketVectors algo over 27 months
 Res.columns
 Res.columns =['baseline','logistic_regression','feed_forward_net','rnn_net','do_nothing']
 Res.plot(figsize=(20,10))
+'''
