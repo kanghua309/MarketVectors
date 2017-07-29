@@ -56,7 +56,7 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 10:
+    if idx == 10000:
         break;
 print Final.head(10)
 print "-" * 20,"Muti-stock table","-" * 20
@@ -133,15 +133,7 @@ print "-" * 20,"Labeled of multi class","-" * 20
 使用相对顺序而非绝对值，是为了泛化模型吗？
 '''
 
-'''
-def labeler_multi(x):
-    if x>0.0029:
-        return 1
-    if x<-0.00462:
-        return -1
-    else:
-        return 0
-'''
+
 print Labeled['class'].value_counts()
 print "-" * 20,"Label distribution","-" * 20
 print Labeled['multi_class'].value_counts()
@@ -161,42 +153,10 @@ from sklearn import linear_model
 from sklearn.metrics import classification_report,confusion_matrix
 
 
-print "*" * 50,"Data prepare over and todo basic predict","*" * 50
-
-logreg = linear_model.LogisticRegression(C=1e5)
-res = logreg.fit(InputDF[:-test_size],Labeled['multi_class'][:-test_size])                                              #取除了最后600个外的数据做测试集,multi class是按收益排序分段泛化的结果集合
-print Labeled['multi_class'][:-test_size].head(10)
-print InputDF[:-test_size].head(10)
-print "-" * 20, "Input & target sample for log regress", "-" * 20
-
-print(classification_report(Labeled['multi_class'][-test_size:],res.predict(InputDF[-test_size:])))                     #使用最后600个做测试
-print "-" * 20,"lassification report","-" * 20
-print(confusion_matrix(Labeled['multi_class'][-test_size:],res.predict(InputDF[-test_size:])))
-print res.predict(InputDF)
-print "-" * 20,"Confusion matrix for muti class","-" * 20
-Labeled['predicted_action'] = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,res.predict(InputDF)))                #分三段
-#Labeled['predicted_action'] = res.predict(InputDF)               #分三段
-print Labeled['predicted_action'].head(10)
-print "-" * 20,"Predicted action","-" * 20
-print(confusion_matrix(Labeled['class'][-test_size:],Labeled['predicted_action'][-test_size:]))
-print "-" * 20,"Confusion matrix for class","-" * 20
-Labeled['pred_return'] = Labeled['predicted_action'] * Labeled['return']
-print Labeled['pred_return'].head(10)
-print "-" * 20,"Predict return","-" * 20
-
-Res = Labeled[-test_size:][['return','act_return','pred_return']].cumsum()
-print Res.tail(10)
-print "-" * 20,"Predict return & act_return & pred_return cumsum ","-" * 20
-
-Res[0] =0
-Res.plot()
-
-
 
 import tensorflow as tf
 
-from  tensorflow.contrib.learn.python.learn.estimators.dnn  import DNNClassifier
-from tensorflow.contrib.layers import real_valued_column
+
 Labeled['tf_class'] = Labeled['multi_class']
 #Labeled['tf_class'] = Labeled['class']
 num_features = len(InputDF.columns)
@@ -213,169 +173,17 @@ val = (InputDF[-test_size:].values,Labeled.tf_class[-test_size:].values)
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
 
-print len(InputDF)
+print len(InputDF),num_classes,num_features
 print Labeled['tf_class'].head(10)
 
-print num_classes
 
-'''
-print Labeled.tf_class[-test_size:].head(10)
-class Model():
-    def __init__(self):
-        global_step = tf.contrib.framework.get_or_create_global_step()                                                  #变量用于保存全局训练步骤（global training step）的数值
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, num_features])                                  #占位符都是由外部输入替代的，None 表示不确定
-        self.target_data = tf.placeholder(dtype=tf.int32, shape=[None])
-        self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[])
-        with tf.variable_scope("ff"):
-            droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)                                  #为了减少过拟合，我们在输入层之前加入dropout。我们用一个placeholder来代表一个神经元的输出在dropout中保持不变的概率。这样我们可以在训练过程中启用dropout，在测试过程中关闭dropout
-
-            layer_1 = tf.contrib.layers.fully_connected(
-                num_outputs=hidden_1_size,
-                inputs=droped_input,
-            )
-            layer_2 = tf.contrib.layers.fully_connected(
-                num_outputs=hidden_2_size,
-                inputs=layer_1,
-            )
-            self.logits = tf.contrib.layers.fully_connected(
-                num_outputs=num_classes,
-                activation_fn=None,
-                inputs=layer_2,
-            )
-        with tf.variable_scope("loss"):                                                                                 #变量的分级命名
-            self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy,首先看输入logits，它的shape是[batch_size, num_classes] ，一般来讲，就是神经网络最后一层的输入;sparse 代表无需再转为one hot编码
-
-            mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
-            mask = tf.cast(mask, tf.float32)
-            #self.loss = tf.reduce_sum(self.losses * mask)/tf.reduce_sum(mask)                                          #mask 是干嘛的？
-            self.loss = tf.reduce_sum(self.losses)
-
-        #scope生成的数据流图具有层次化;
-        with tf.name_scope("train"):                                                                                    #找到对于各个变量的损失的梯度值
-            opt = tf.train.AdamOptimizer(lr)                                                                            #lr学习率;adam梯度随机优化算法
-            gvs = opt.compute_gradients(self.loss)
-            self.train_op = opt.apply_gradients(gvs, global_step=global_step)
-
-        with tf.name_scope("predictions"):                                                                              #评估模型,
-            self.probs = tf.nn.softmax(self.logits)                                                                     #多分类问题上指定某个类别的概率值，Softmax比较合适。即使后面我们要去训练更复杂的模型，最后一层依然是Softmax
-            self.predictions = tf.argmax(self.probs, 1)
-            correct_pred = tf.cast(tf.equal(self.predictions, tf.cast(self.target_data, tf.int64)), tf.float64)
-            self.accuracy = tf.reduce_mean(correct_pred)
-
-
-
-with tf.Graph().as_default():                                                                                           #默认的tf.Graph全局实例关联起来
-    model = Model()
-    input_ = train[0]
-    target = train[1]
-    with tf.Session(config=tf.ConfigProto(log_device_placement=False,allow_soft_placement=True)) as sess:
-        init = tf.global_variables_initializer()                                                                        #必须首先初始化
-        sess.run([init])                                                                                                #这里session 只执行初始化
-        epoch_loss = 0
-        for e in range(NUM_EPOCHS):
-            if epoch_loss > 0 and epoch_loss < 1:
-                break
-            epoch_loss = 0
-            for batch in range(0, NUM_TRAIN_BATCHES):
-                start = batch * BATCH_SIZE
-                end = start + BATCH_SIZE
-
-                feed = {                                                                                                #反馈字典-对应占位符（变量）
-                    model.input_data: input_[start:end],
-                    model.target_data: target[start:end],
-                    model.dropout_prob: 0.5                                                                            #防止过拟合，随机剪枝，进化； 1.0代表完全保留
-                }
-
-                _, loss, acc = sess.run(                                                                                #train op ， loss （the loss between prediction and real data  ）必须给出
-                    [
-                        model.train_op,
-                        model.loss,
-                        model.accuracy,
-                    ]
-                    , feed_dict=feed
-                )
-                epoch_loss += loss
-            print('step - {0} loss - {1} acc - {2}'.format((1 + batch + NUM_TRAIN_BATCHES * e), epoch_loss, acc))
-
-        print("*" * 20,'Done training',"*" * 20)
-
-        final_preds = np.array([])
-        final_probs = None
-        for batch in range(0, NUM_VAL_BATCHES):
-            start = batch * BATCH_SIZE
-            end = start + BATCH_SIZE
-            feed = {
-                model.input_data: val[0][start:end],
-                model.target_data: val[1][start:end],
-                model.dropout_prob: 1                                                                                   #测试验证是dropout 为1
-            }
-
-            acc, preds, probs = sess.run(
-                [
-                    model.accuracy,
-                    model.predictions,
-                    model.probs
-                ]
-                , feed_dict=feed
-            )
-            print("*" * 20, 'Acc',acc, "*" * 20)
-
-
-            final_preds = np.concatenate((final_preds, preds), axis=0)
-            if final_probs is None:
-                final_probs = probs
-            else:
-                final_probs = np.concatenate((final_probs, probs), axis=0)
-        prediction_conf = final_probs[np.argmax(final_probs, 1)]
-        print("*" * 20, prediction_conf, "*" * 20)
-
-#print "*" * 20,"Prediction over","*" * 20
-#print prediction_conf
-#print "*" * 20,"conf over","*" * 20
-#print final_preds
-#print "*" * 20,"probs over","*" * 20
-
-Result = Labeled[-test_size:].copy()
-Result['nn_pred'] = final_preds
-Result['mod_nn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
-#Result['mod_nn_prod']  = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))                #分三段
-#print Result['mod_nn_prod'].tail(10)
-#print Result['nn_pred'].head(10)
-Result['nn_ret'] = Result.mod_nn_prod*Result['return']
-#Res = Result[-test_size:][['return','act_return','nn_ret']].cumsum()
-Res = Result[-test_size:][['return','act_return','nn_ret','pred_return']].cumsum()
-print Res.tail(10)
-print "*" * 20,"NN predict return cumsum","*" * 20
-
-#Res = Result[-test_size:][['return','act_return','pred_return','nn_ret']].cumsum()
-#Res = (1+Result[-test_size:][['return','act_return','nn_ret','pred_return']]).cumprod()
-Res[0] =0
-Res.plot(secondary_y='act_return')
-print(confusion_matrix(Result['class'] ,Result['mod_nn_prod']))
-print "-" * 20,"Confusion matrix for class","-" * 20
-
-print(classification_report(Result['class'] ,Result['mod_nn_prod']))
-print "-" * 20,"Classification report ","-" * 20
-
-print(confusion_matrix(Result['multi_class'],Result['nn_pred']))
-print "-" * 20,"Confusion matrix for muti_class","-" * 20
-#cm = pd.DataFrame(confusion_matrix(Result['multi_class'],Result['nn_pred']))
-#sns.heatmap(cm.div(cm.sum(1)))
-
-#Result[Result.multi_class==6]['return'].hist()
-print(classification_report(Result['multi_class'],Result['nn_pred']))
-print "-" * 20,"Classification report2","-" * 20
-
-#Result.hist(by='multi_class',column='return',sharex=True) ## fix higer pandas
-
-'''
 print "*" * 50,"Training a rnn network","*" * 50
 
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
 RNN_HIDDEN_SIZE=100
 FIRST_LAYER_SIZE=1000
 SECOND_LAYER_SIZE=250
-NUM_LAYERS=2
+NUM_LAYERS=3
 BATCH_SIZE=50
 NUM_EPOCHS=200 #200
 lr=0.0003
@@ -385,34 +193,62 @@ ATTN_LENGTH=30
 beta=0
 
 
-print num_features #42
-
 class RNNModel():
     def __init__(self):
         global_step = tf.contrib.framework.get_or_create_global_step()
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[BATCH_SIZE, num_features],name = "input")
-        self.target_data = tf.placeholder(dtype=tf.int32, shape=[BATCH_SIZE],name = "target")
-        self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[],name = "dropout")
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[BATCH_SIZE, num_features],name = "input-data")
+        self.target_data = tf.placeholder(dtype=tf.int32, shape=[BATCH_SIZE],name = "target-data")
+        self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[],name = "my-dropout")
 
         def makeGRUCells():
-            #base_cell = tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, )
-            #layered_cell = tf.nn.rnn_cell.MultiRNNCell([base_cell] * NUM_LAYERS, state_is_tuple=False)
-            layered_cell = tf.nn.rnn_cell.MultiRNNCell(
-                [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
+            cells = []
+            for i in range(NUM_LAYERS):
+                cell = tf.contrib.rnn.GRUCell(num_units=RNN_HIDDEN_SIZE, )
 
-            attn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell, attn_length=ATTN_LENGTH,
-                                                            state_is_tuple=False)
-            return attn_cell
+                if len(cells)== 0:
+                    # Add attention wrapper to first layer.
+                    cell = tf.contrib.rnn.AttentionCellWrapper(
+                        cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
+                # attention 很奇怪，加入后state_size: 12600 # 一层4400 - 不加入就300
+                #必须false，True 比错
 
+                cell = tf.contrib.rnn.DropoutWrapper(cell, output_keep_prob=0.5)
+                cells.append(cell)
+
+            attn_cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=False)  #必须false，True 比错
+
+            #layered_cell = tf.nn.rnn_cell.MultiRNNCell(
+            #    [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
+
+            #attn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell,
+            #                                                attn_length=ATTN_LENGTH,                                    # Add attention wrapper to first layer ??
+            #                                                state_is_tuple=False)
+            return attn_cell  # DropoutWrapper 还没加
+
+
+        '''
+           cells = []
+            for i in range(n_layers):                   
+                cell = tf.contrib.rnn.LSTMCell(n_hidden, state_is_tuple=True)
+                cell = tf.contrib.rnn.AttentionCellWrapper(
+                    cell, attn_length=40, state_is_tuple=True)
+                cell = tf.contrib.rnn.DropoutWrapper(cell,output_keep_prob=0.5)
+                cells.append(cell)
+            cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=True)
+            init_state = cell.zero_state(batch_size, tf.float32)
+        '''
         self.gru_cell = makeGRUCells()
         #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
         self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
 
-        #init_state = tf.zeros([BATCH_SIZE, NUM_LAYERS * RNN_HIDDEN_SIZE], name="Initial_State_Placeholder")  # <---------
-
         self.start_state = tf.placeholder(dtype=tf.float32,
-                                          shape=[BATCH_SIZE, self.gru_cell.state_size],
-                                          name = "state")
+                                          shape=[BATCH_SIZE, self.gru_cell.state_size ],  # (50*100)
+                                          name="state")
+        #self.start_state = tf.placeholder(dtype=tf.float32,
+        #                                  shape=[BATCH_SIZE, RNN_HIDDEN_SIZE * NUM_LAYERS],                             #(50*300)
+        #                                  name = "state")
+        #self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
+
         '''
         with tf.variable_scope("ff", initializer=xavier_initializer(uniform=False)):
             droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
@@ -433,15 +269,21 @@ class RNNModel():
         #print split_inputs
 
 
-        #rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_frames, frame_length))
+        rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_features))
 
         #X = tf.reshape(self.input_data, [-1, BATCH_SIZE, self.gru_cell.state_size])
+        print self.input_data
+        print self.target_data
+        print tf.expand_dims(self.input_data, -1)
+        print "zero state:",self.zero_state         #Tensor("MultiRNNCellZeroState/MultiRNNCellZeroState/zeros:0", shape=(50, 300), dtype=float32)
+        print "start state:",self.start_state
+        print "state_size:",self.gru_cell.state_size              # NUM_LAYERS * RNN_HIDDEN_SIZE
 
         states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,
                                                          inputs=tf.expand_dims(self.input_data, -1),
-                                                         initial_state=self.zero_state,
-                                                         time_major=False
+                                                         dtype=tf.float32
                                                          )
+
         '''
         split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
@@ -462,11 +304,20 @@ class RNNModel():
         outputs = tf.stack(outputs, axis=1)  # Pack them back into a single tensor
         outputs = tf.reshape(outputs, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
         '''
-        states_series = tf.reshape(states_series, [-1, RNN_HIDDEN_SIZE])
+        print "output0：",states_series         #(50,42,100)                                                            #shape=(50, 42, 100)
+
+        states_series = tf.transpose(states_series, [1, 0, 2])
+        print "0.1",states_series
+        last = tf.gather(states_series, int(states_series.get_shape()[0]) - 1)                                          #取最后一个输出
+        print "last:",last
+
+        #states_series = tf.reshape(states_series, [-1,RNN_HIDDEN_SIZE])
 
         #states_series = tf.reshape(states_series, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
-        outputs = states_series
-        self.end_state = current_state[-1][1]
+        outputs = last
+        self.end_state = current_state
+        print "output1:",outputs
+        print "state:",current_state,self.end_state
 
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
@@ -474,10 +325,8 @@ class RNNModel():
             activation_fn=None
         )
 
-
         with tf.variable_scope("loss"):
             self.penalties = tf.reduce_sum([beta * tf.nn.l2_loss(var) for var in tf.trainable_variables()])
-
             self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)
             self.loss = tf.reduce_sum(self.losses + beta * self.penalties)
 
@@ -494,10 +343,8 @@ class RNNModel():
 
 
 with tf.Graph().as_default():
-    print "--------------------------------------1"
 
     model = RNNModel()
-    print "--------------------------------------12"
 
     input_ = train[0]
     target = train[1]
@@ -508,14 +355,13 @@ with tf.Graph().as_default():
 
         for e in range(NUM_EPOCHS):
             state = sess.run(model.zero_state)
-            print state
-            print "--------------------------------------"
+            #print state
+            #print "--------------------------------------"
             epoch_loss = 0
             for batch in range(0, NUM_TRAIN_BATCHES):
                 start = batch * BATCH_SIZE
                 end = start + BATCH_SIZE
                 print "-------------",start,end
-
                 feed = {
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
@@ -531,6 +377,8 @@ with tf.Graph().as_default():
                     ]
                     , feed_dict=feed
                 )
+                #print "run state ：",type(state),len(state),state
+
                 epoch_loss += loss
 
             print('step - {0} loss - {1} acc - {2}'.format((e), epoch_loss, acc))
