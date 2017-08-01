@@ -202,7 +202,7 @@ dropout=0.5 #0.2
 hidden_1_size = 1000
 hidden_2_size = 250
 num_classes = Labeled.tf_class.nunique()
-NUM_EPOCHS=2000 #
+NUM_EPOCHS=200 #
 BATCH_SIZE=50
 lr=0.0001
 
@@ -243,8 +243,8 @@ class Model():
         with tf.variable_scope("loss"):                                                                                 #变量的分级命名
             self.losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.logits, labels=self.target_data)   #损失函数定义cross_entropy,首先看输入logits，它的shape是[batch_size, num_classes] ，一般来讲，就是神经网络最后一层的输入;sparse 代表无需再转为one hot编码
 
-            mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
-            mask = tf.cast(mask, tf.float32)
+            #mask = (1 - tf.sign(1 - self.target_data))  # Don't give credit for flat days
+            #mask = tf.cast(mask, tf.float32)
             #self.loss = tf.reduce_sum(self.losses * mask)/tf.reduce_sum(mask)                                          #mask 是干嘛的？
             self.loss = tf.reduce_sum(self.losses)
 
@@ -374,7 +374,7 @@ FIRST_LAYER_SIZE=1000
 SECOND_LAYER_SIZE=250
 NUM_LAYERS=2
 BATCH_SIZE=50
-NUM_EPOCHS=200
+NUM_EPOCHS=20
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
@@ -402,7 +402,9 @@ class RNNModel():
         self.gru_cell = makeGRUCells()
         self.zero_state = self.gru_cell.zero_state(1, tf.float32)
 
+
         self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
+
 
         with tf.variable_scope("ff", initializer=xavier_initializer(uniform=False)):
             droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
@@ -418,12 +420,13 @@ class RNNModel():
                 inputs=layer_1,
 
             )
-            
+
 
         split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
         split_inputs = tf.unstack(split_inputs, axis=1, name="unpack_l1")
-        print(len(split_inputs),split_inputs)
+        print len(split_inputs)
+        print "split input:",split_inputs
 
         states = []
         outputs = []
@@ -432,12 +435,17 @@ class RNNModel():
             for i, inp in enumerate(split_inputs):
                 if i > 0:
                     scope.reuse_variables()
-                output, state = self.gru_cell(inp, state)
+                output, state = self.gru_cell(inp, state)                                                               # inp state 这参数怎么传进去的
                 states.append(state)
                 outputs.append(output)
         self.end_state = states[-1]
+        print "outputs0:",len(outputs),outputs      #50 * (1 * 100)
         outputs = tf.stack(outputs, axis=1)  # Pack them back into a single tensor
+        print "outputs1:",outputs
         outputs = tf.reshape(outputs, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
+        print "outputs2:",outputs
+        print "state1:",len(states),states
+        print "end state1:",self.end_state
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
@@ -478,6 +486,8 @@ with tf.Graph().as_default():
             for batch in range(0, NUM_TRAIN_BATCHES):
                 start = batch * BATCH_SIZE
                 end = start + BATCH_SIZE
+                #print "-------------",start,end
+
                 feed = {
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
@@ -494,6 +504,8 @@ with tf.Graph().as_default():
                     , feed_dict=feed
                 )
                 epoch_loss += loss
+                #print "run state ：", type(state), len(state),state
+
 
             print('step - {0} loss - {1} acc - {2}'.format((e), epoch_loss, acc))
         final_preds = np.array([])

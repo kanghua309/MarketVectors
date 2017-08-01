@@ -58,7 +58,11 @@ cell = tf.nn.rnn_cell.MultiRNNCell([my_cell() for _ in range(num_layers)], state
 
 states_series, current_state = tf.nn.dynamic_rnn(cell, tf.expand_dims(batchX_placeholder, -1),
                                                  initial_state=rnn_tuple_state)
+print ("+++++++++++++++++++")
+print(states_series)
+print (current_state)
 states_series = tf.reshape(states_series, [-1, state_size])
+print(states_series,current_state)
 
 logits = tf.matmul(states_series, W2) + b2                                                                              # Broadcasted addition ; 全连接是不是隐含了该计算
 labels = tf.reshape(batchY_placeholder, [-1])
@@ -67,6 +71,7 @@ logits_series = tf.unstack(tf.reshape(logits, [batch_size, truncated_backprop_le
 print("---------------------------------")
 print(logits_series,len(logits_series))
 predictions_series = [tf.nn.softmax(logit) for logit in logits_series]
+print (predictions_series)
 
 losses = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels)
 total_loss = tf.reduce_mean(losses)
@@ -124,7 +129,7 @@ with tf.Session() as sess:
                     batchY_placeholder: batchY,
                     init_state: _current_state
                 })
-
+            print (_predictions_series)
             loss_list.append(_total_loss)
 
             if batch_idx % 100 == 0:
