@@ -57,7 +57,7 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 10:
+    if idx == 100000:
         break;
 print "stock num：",idx
 print Final.head(10)
@@ -186,7 +186,7 @@ RNN_HIDDEN_SIZE=100
 #SECOND_LAYER_SIZE=250
 NUM_LAYERS=2
 BATCH_SIZE=50
-NUM_EPOCHS=800 #200
+NUM_EPOCHS=200 #200
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)         #每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
@@ -209,7 +209,7 @@ class RNNModel():
                 if len(cells)== 0:
                     # Add attention wrapper to first layer.
                     cell = tf.contrib.rnn.AttentionCellWrapper(
-                        cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
+                       cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
                 #attention 很奇怪，加入后state_size: 12600 # 一层4400 - 不加入就300
                 #必须false，True 比错
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
@@ -222,18 +222,6 @@ class RNNModel():
             #                                                state_is_tuple=False)
             return attn_cell  # DropoutWrapper 还没加
 
-
-        '''
-           cells = []
-            for i in range(n_layers):                   
-                cell = tf.contrib.rnn.LSTMCell(n_hidden, state_is_tuple=True)
-                cell = tf.contrib.rnn.AttentionCellWrapper(
-                    cell, attn_length=40, state_is_tuple=True)
-                cell = tf.contrib.rnn.DropoutWrapper(cell,output_keep_prob=0.5)
-                cells.append(cell)
-            cell = tf.contrib.rnn.MultiRNNCell(cells, state_is_tuple=True)
-            init_state = cell.zero_state(batch_size, tf.float32)
-        '''
         self.gru_cell = makeGRUCells()
         #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
         self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
@@ -246,26 +234,9 @@ class RNNModel():
         #                                  name = "state")
         #self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
 
-        '''
-        with tf.variable_scope("ff", initializer=xavier_initializer(uniform=False)):
-            droped_input = tf.nn.dropout(self.input_data, keep_prob=self.dropout_prob)
 
-                                                                                             #no use
-            layer_1 = tf.contrib.layers.fully_connected(
-                num_outputs=FIRST_LAYER_SIZE,
-                inputs=droped_input,
-
-            )
-            layer_2 = tf.contrib.layers.fully_connected(
-                num_outputs=RNN_HIDDEN_SIZE,
-                inputs=layer_1,
-
-            )
-        '''
         #split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],name="reshape_l1")
         #print split_inputs
-
-
         #rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_features))
 
         #X = tf.reshape(self.input_data, [-1, BATCH_SIZE, self.gru_cell.state_size])
@@ -275,17 +246,14 @@ class RNNModel():
         print "zero state:",self.zero_state         #Tensor("MultiRNNCellZeroState/MultiRNNCellZeroState/zeros:0", shape=(50, 300), dtype=float32)
 #        print "start state:",self.start_state
         print "state_size:",self.gru_cell.state_size              # NUM_LAYERS * RNN_HIDDEN_SIZE
-
-
         states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,                                                 #收敛的好慢 相比自己构造层次
-                                                         inputs=tf.expand_dims(self.input_data, -1),                    #shape=(42, 50, 100)
+                                                         inputs=tf.expand_dims(self.input_data, -1),                    #shape=(42, 50, 100)  ? ("ExpandDims:0", shape=(50, 42, 1), dtype=float32)
                                                          initial_state=self.zero_state,
                                                          time_major=False                                               #如果 inputs 为 (batches, steps, inputs) ==> time_major=False
                                                          )
 
         print "current state：",current_state
         print "output0：",states_series         #(50,42,100)                                                            #shape=(50, 42, 100)
-
         states_series = tf.transpose(states_series, [1, 0, 2])
         print "0.1",states_series
         last = tf.gather(states_series, int(states_series.get_shape()[0]) - 1)                                          #取最后一个输出
@@ -298,7 +266,6 @@ class RNNModel():
         print "output1:",outputs
         print "state:",current_state
 #        print "end state:",self.end_state
-
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
@@ -323,12 +290,17 @@ class RNNModel():
 
 
 with tf.Graph().as_default():
+    config = tf.ConfigProto()
+    config.allow_soft_placement = True
+    config.log_device_placement = False
+    config.gpu_options.allow_growth = True
+    config.gpu_options.per_process_gpu_memory_fraction = 0.5
 
     model = RNNModel()
 
     input_ = train[0]
     target = train[1]
-    with tf.Session(config=tf.ConfigProto(log_device_placement=False,allow_soft_placement=True)) as sess:
+    with tf.Session(config=config) as sess:
         init = tf.global_variables_initializer()
         sess.run([init])
         loss = 2000
