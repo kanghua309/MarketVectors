@@ -193,6 +193,7 @@ NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
 ATTN_LENGTH=30
 beta=0
 
+
 print NUM_TRAIN_BATCHES  #66
 
 class RNNModel():
