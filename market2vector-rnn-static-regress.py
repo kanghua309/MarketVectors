@@ -97,12 +97,12 @@ num_stocks = len(TargetDF.columns)
 
 print "num stocks :", num_stocks
 #print np.exp(TargetDF)
-print (1-np.exp(TargetDF))
+#print (1-np.exp(TargetDF))
 #print (1-np.exp(TargetDF)).sum(1)
 #TotalReturn = ((1-np.exp(TargetDF)).sum(1))/num_stocks # If i put one dollar in each stock at the close, this is how much I'd get back
-TotalReturn = (1-np.exp(TargetDF))
-print TotalReturn.head(10)
-print "-" * 20,"Return of all stock avg? for current day","-" * 20
+#TotalReturn = (1-np.exp(TargetDF))
+#print TotalReturn.head(10)
+#print "-" * 20,"Return of all stock avg? for current day","-" * 20
 
 
 '''
@@ -197,32 +197,33 @@ num_features = len(InputDF.columns)
 
 train = (InputDF[:-test_size].values,TargetDF[:-test_size].values)
 val = (InputDF[-test_size:].values,TargetDF[-test_size:].values)
-
+print np.shape(TargetDF[-test_size:].values)
 
 print len(train[0])   #3300 个股票日？ 股票没有那么多,500个
-
-print num_features
+print "Feather count:",num_features
 num_stocks = len(TargetDF.columns)
+print "Stocks count:",num_stocks
 
+print np.shape(TargetDF[-test_size:].values),np.shape(InputDF[-test_size:].values)
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
 RNN_HIDDEN_SIZE=100
 #FIRST_LAYER_SIZE=1000
 #SECOND_LAYER_SIZE=250
 NUM_LAYERS=2
 BATCH_SIZE=50
-NUM_EPOCHS=200 #200
+NUM_EPOCHS=2 #200
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)         #每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
 ATTN_LENGTH=30
 beta=0
 
-print NUM_TRAIN_BATCHES  #66
+#print NUM_TRAIN_BATCHES  #66
 class RNNModel():
     def __init__(self):
         global_step = tf.contrib.framework.get_or_create_global_step()
-        self.input_data = tf.placeholder(dtype=tf.float32, shape=[BATCH_SIZE, num_features],name = "input-data")
-        self.target_data = tf.placeholder(dtype=tf.int32, shape=[BATCH_SIZE,  num_stocks],name = "target-data")           #------------------------------????????????????????????????
+        self.input_data = tf.placeholder(dtype=tf.float32, shape=[None, num_features],name = "input-data")
+        self.target_data = tf.placeholder(dtype=tf.float32, shape=[None,  num_stocks],name = "target-data")           #------------------------------????????????????????????????
         self.dropout_prob = tf.placeholder(dtype=tf.float32, shape=[],name = "my-dropout")
 
         def makeGRUCells():
@@ -233,56 +234,35 @@ class RNNModel():
                     # Add attention wrapper to first layer.
                     cell = tf.contrib.rnn.AttentionCellWrapper(
                        cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
-                #attention 很奇怪，加入后state_size: 12600 # 一层4400 - 不加入就300
-                #必须false，True 比错
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=False)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
-            #layered_cell = tf.nn.rnn_cell.MultiRNNCell(
-            #    [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
-            #attn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell,
-            #                                                attn_length=ATTN_LENGTH,                                    # Add attention wrapper to first layer ??
-            #                                                state_is_tuple=False)
-            return attn_cell  # DropoutWrapper 还没加
+
+            return attn_cell
 
         self.gru_cell = makeGRUCells()
         #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
         self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
 
-        #self.start_state = tf.placeholder(dtype=tf.float32,                                                              # 不使用dynamic 时，start_state 用于给嵌套cell输入，然后end state 在作为训练结果，送给嵌套cell 在迭代？ 如果使用dynamic_rnn 则还需要它吗？
-        #                                  shape=[BATCH_SIZE, self.gru_cell.state_size ],  # (50*200)
-        #                                  name="state")
-        #self.start_state = tf.placeholder(dtype=tf.float32,
-        #                                  shape=[BATCH_SIZE, RNN_HIDDEN_SIZE * NUM_LAYERS],                             #(50*300)
-        #                                  name = "state")
-        #self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
-
-
-        #split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],name="reshape_l1")
-        #print split_inputs
-        #rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_features))
-
-        #X = tf.reshape(self.input_data, [-1, BATCH_SIZE, self.gru_cell.state_size])
         print self.input_data
         print self.target_data
-        print tf.expand_dims(self.input_data, -1)
-        print "zero state:",self.zero_state         #Tensor("MultiRNNCellZeroState/MultiRNNCellZeroState/zeros:0", shape=(50, 300), dtype=float32)
-        #        print "start state:",self.start_state
-        print "state_size:",self.gru_cell.state_size              # NUM_LAYERS很明显，这个输入是一个list，len（list）=步长 list[0].shape=[batch,input]  * RNN_HIDDEN_SIZE
+
+        states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,                                                 #收敛的好慢 相比自己构造层次
+                                                         inputs=tf.expand_dims(self.input_data, -1),                    #shape=(42, 50, 100)  ? ("ExpandDims:0", shape=(50, 42, 1), dtype=float32)
+                                                         initial_state=self.zero_state,
+                                                         time_major=False                                               #如果 inputs 为 (batches, steps, inputs) ==> time_major=False
+                                                         )
+        '''
         split_inputs = tf.reshape(self.input_data, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
         print split_inputs
         x = tf.unstack(split_inputs, axis=1, name="unpack_l1")
-        #x = tf.unstack(self.input_data,axis= 1)
-        #x = self.input_data
-        print "------------------------------------"
-        print self.input_data
-        print len(x),x
-        print "------------------------------------"
+
         states_series, current_state = tf.nn.static_rnn(self.gru_cell,  # 收敛的好慢 相比自己构造层次
                                                          inputs=x,  #这个输入是一个list，len（list）= 步长 list[0].shape=[batch,input] ?
                                                          dtype=tf.float32
                                                          )
+        '''
         print "current state：",current_state
         print "output0：",states_series         #(50,42,100)                                                            #shape=(50, 42, 100)
         states_series = tf.transpose(states_series, [1, 0, 2])
@@ -293,25 +273,37 @@ class RNNModel():
         print "output1:",outputs
         print "state:",current_state
 
+        self.Y_pred = tf.contrib.layers.fully_connected(
+            outputs, num_stocks, activation_fn=None)  # We use the last cell's output
+
+        # cost/loss
+        self.loss = tf.reduce_sum(tf.square(self.Y_pred - self.target_data), name='losses_sum')
+
         # output is result of linear activation of last layer of RNN
-        weight = tf.Variable(tf.random_normal([RNN_HIDDEN_SIZE, num_stocks]))
-        bias = tf.Variable(tf.random_normal([num_stocks]))
-        predictions = tf.matmul(outputs, weight) + bias
+        #weight = tf.Variable(tf.random_normal([RNN_HIDDEN_SIZE, num_stocks]))
+        #bias = tf.Variable(tf.random_normal([num_stocks]))
+        #predictions = tf.matmul(outputs, weight) + bias
+
+
 
         # 2. Define the loss function for training/evaluation
-        # print 'targets={}'.format(targets)
-        # print 'preds={}'.format(predictions)
-        self.loss = tf.losses.mean_squared_error(self.target_data, predictions)
-        #eval_metric_ops = {
+        #print 'targets={}'.format(self.target_data)
+        #print 'preds={}'.format(predictions)
+        #self.loss = tf.losses.mean_squared_error(self.target_data, predictions)
         #    "rmse": tf.metrics.root_mean_squared_error(self.target_data, predictions)
         #}
-        self.rmse = tf.metrics.root_mean_squared_error(self.target_data, predictions)
+
+        #self.predictions = tf.placeholder(tf.float32, [None, num_stocks], name='predictions')
+        #self.rmse = tf.metrics.root_mean_squared_error(self.target_data, self.predictions)
         # 3. Define the training operation/optimizer
-        self.train_op = tf.contrib.layers.optimize_loss(
-            loss=self.loss,
-            global_step=tf.contrib.framework.get_global_step(),
-            learning_rate=0.01,
-            optimizer="SGD")
+        optimizer = tf.train.AdamOptimizer(0.0001)
+        self.train = optimizer.minimize(self.loss, name='train')
+
+        # RMSE
+        #self.targets = tf.placeholder(tf.float32, [None, 1], name='targets')
+        self.predictions = tf.placeholder(tf.float32, [None, num_stocks], name='predictions')
+        print self.predictions
+        self.rmse = tf.sqrt(tf.reduce_mean(tf.square(self.target_data - self.predictions)), name='rmse')
 
 
 
@@ -344,23 +336,17 @@ with tf.Graph().as_default():
                     model.input_data: input_[start:end],
                     model.target_data: target[start:end],
                     model.dropout_prob: 0.5,
-                    #model.start_state: state
                 }
                 _, loss  = sess.run(
                     [
-                        model.train_op,
+                        model.train,
                         model.loss,
-                        #model.accuracy,
-                        #model.end_state
                     ]
                     , feed_dict=feed
                 )
 
-                #print "loss",loss
-                #print "accuracy",acc
-                #print "end_state",state
                 epoch_loss += loss
-            print('step - {0} loss - {1}'.format((e), epoch_loss))
+            print('step - {0} loss - {1} '.format((e), epoch_loss))
 
         for batch in range(0, NUM_VAL_BATCHES):
             start = batch * BATCH_SIZE
@@ -371,13 +357,47 @@ with tf.Graph().as_default():
                 model.dropout_prob: 1,
                 # model.start_state: state
             }
-            rmse = sess.run(
+
+            test_predict = sess.run(
                 [
-                    model.rmse,
+                    model.Y_pred,
                 ]
                 , feed_dict=feed
             )
-            print(rmse)
+            print("predictor:",np.shape(test_predict)),np.shape(test_predict[-1])
+            rmse = sess.run(
+                model.rmse,
+                feed_dict={
+                    model.target_data: val[1][start:end],
+                    model.predictions: test_predict[-1]
+                })
+
+            print("RMSE: {}".format(rmse))
+
+        # Predictions test
+        print val[0][-1]
+        print np.shape(val[0]),np.shape(val[0][-1:]),np.shape(val[0][-1:].transpose())
+        prediction_test = sess.run(model.Y_pred, feed_dict={ model.input_data: val[0][-1:]})
+        print "prediction_test:",prediction_test
+        '''
+        print (type(val[0][-1]),np.shape(val[0][-1:]))
+        print val[0][-1:]
+        feed = {
+            model.input_data: val[0][-1:],
+            #model.target_data: val[1][-1],
+            model.dropout_prob: 1,
+            # model.start_state: state
+        }
+        prec = sess.run(
+            [
+                model.Y_pred,
+                # model.rmse,
+            ]
+            , feed_dict=feed
+        )
+        print "------------------------------------------------dest day:"
+        print(prec)
+        '''
             #assert len(preds) == BATCH_SIZE
             #final_preds = np.concatenate((final_preds, preds), axis=0)
 
