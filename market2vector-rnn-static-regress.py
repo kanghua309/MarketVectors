@@ -242,14 +242,15 @@ class RNNModel():
 
         self.gru_cell = makeGRUCells()
         #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
-        self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
+        #self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
 
         print self.input_data
         print self.target_data
 
         states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,                                                 #收敛的好慢 相比自己构造层次
                                                          inputs=tf.expand_dims(self.input_data, -1),                    #shape=(42, 50, 100)  ? ("ExpandDims:0", shape=(50, 42, 1), dtype=float32)
-                                                         initial_state=self.zero_state,
+                                                         dtype=tf.float32,                                              #由于预测，最后给定的batch 是1，而对于非订场batch ，就要用dynamic rnn？ 而且iniita_state 不能设置，因为shape不定？
+                                                         #initial_state=self.zero_state,
                                                          time_major=False                                               #如果 inputs 为 (batches, steps, inputs) ==> time_major=False
                                                          )
         '''
@@ -304,9 +305,6 @@ class RNNModel():
         self.predictions = tf.placeholder(tf.float32, [None, num_stocks], name='predictions')
         print self.predictions
         self.rmse = tf.sqrt(tf.reduce_mean(tf.square(self.target_data - self.predictions)), name='rmse')
-
-
-
 
 with tf.Graph().as_default():
     config = tf.ConfigProto()
@@ -378,7 +376,11 @@ with tf.Graph().as_default():
         # Predictions test
         print val[0][-1]
         print np.shape(val[0]),np.shape(val[0][-1:]),np.shape(val[0][-1:].transpose())
-        prediction_test = sess.run(model.Y_pred, feed_dict={ model.input_data: val[0][-1:]})
+        prediction_test = sess.run(
+            model.Y_pred,
+            feed_dict={
+                model.input_data: val[0][-1:]
+                })
         print "prediction_test:",prediction_test
         '''
         print (type(val[0][-1]),np.shape(val[0][-1:]))
