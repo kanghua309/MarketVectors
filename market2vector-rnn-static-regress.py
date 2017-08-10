@@ -374,6 +374,7 @@ with tf.Graph().as_default():
 
             print("RMSE: {}".format(rmse))
 
+
         # Predictions test
         print val[0][-1]
         print np.shape(val[0]),np.shape(val[0][-1:]),np.shape(val[0][-1:].transpose())
