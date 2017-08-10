@@ -57,7 +57,7 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 100000:
+    if idx == 10:
         break;
 print "stock num：",idx
 print Final.head(10)
@@ -215,40 +215,68 @@ class RNNModel():
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=False)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
+            #layered_cell = tf.nn.rnn_cell.MultiRNNCell(
+            #    [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
+            #attn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell,
+            #                                                attn_length=ATTN_LENGTH,                                    # Add attention wrapper to first layer ??
+            #                                                state_is_tuple=False)
             return attn_cell  # DropoutWrapper 还没加
 
         self.gru_cell = makeGRUCells()
         #self.zero_state = self.gru_cell.zero_state(1, tf.float32)
         self.zero_state = self.gru_cell.zero_state(BATCH_SIZE, tf.float32)
 
+        #self.start_state = tf.placeholder(dtype=tf.float32,                                                              # 不使用dynamic 时，start_state 用于给嵌套cell输入，然后end state 在作为训练结果，送给嵌套cell 在迭代？ 如果使用dynamic_rnn 则还需要它吗？
+        #                                  shape=[BATCH_SIZE, self.gru_cell.state_size ],  # (50*200)
+        #                                  name="state")
+        #self.start_state = tf.placeholder(dtype=tf.float32,
+        #                                  shape=[BATCH_SIZE, RNN_HIDDEN_SIZE * NUM_LAYERS],                             #(50*300)
+        #                                  name = "state")
+        #self.start_state = tf.placeholder(dtype=tf.float32, shape=[1, self.gru_cell.state_size])
 
+
+        #split_inputs = tf.reshape(droped_input, shape=[1, BATCH_SIZE, num_features],name="reshape_l1")
+        #print split_inputs
+        #rnn_inputs = tf.reshape(self.input_data, (BATCH_SIZE, num_features))
+
+        #X = tf.reshape(self.input_data, [-1, BATCH_SIZE, self.gru_cell.state_size])
         print self.input_data
         print self.target_data
-        print "zero state:",self.zero_state                                                                             #Tensor("MultiRNNCellZeroState/MultiRNNCellZeroState/zeros:0", shape=(50, 300), dtype=float32)
-        print "state_size:",self.gru_cell.state_size                                                                    #NUM_LAYERS * RNN_HIDDEN_SIZE
-        states_series, current_state = tf.nn.dynamic_rnn(self.gru_cell,                                                 #收敛的好慢 相比自己构造层次
-                                                         inputs=tf.expand_dims(self.input_data, -1),                    #shape=(42, 50, 100)  ? ("ExpandDims:0", shape=(50, 42, 1), dtype=float32)
-                                                         initial_state=self.zero_state,
-                                                         time_major=False                                               #如果 inputs 为 (batches, steps, inputs) ==> time_major=False
-                                                         )
-
-        '''
+        print tf.expand_dims(self.input_data, -1)
+        print "zero state:",self.zero_state         #Tensor("MultiRNNCellZeroState/MultiRNNCellZeroState/zeros:0", shape=(50, 300), dtype=float32)
+        #        print "start state:",self.start_state
+        print "state_size:",self.gru_cell.state_size              # NUM_LAYERS很明显，这个输入是一个list，len（list）=步长 list[0].shape=[batch,input]  * RNN_HIDDEN_SIZE
         split_inputs = tf.reshape(self.input_data, shape=[1, BATCH_SIZE, num_features],
                                   name="reshape_l1")  # Each item in the batch is a time step, iterate through them
         print split_inputs
-        split_inputs = tf.unstack(split_inputs, axis=1, name="unpack_l1")
-        states_series, current_state = tf.nn.static_rnn(self.gru_cell,                                                  #收敛的好慢 相比自己构造层次
-                                                         inputs=split_inputs,                                           #这个输入是一个list，len（list）= 步长 list[0].shape=[batch,input] ?
+        x = tf.unstack(split_inputs, axis=1, name="unpack_l1")
+        #x = tf.unstack(self.input_data,axis= 1)
+        #x = self.input_data
+        print "------------------------------------"
+        print self.input_data
+        print len(x),x
+        print "------------------------------------"
+        states_series, current_state = tf.nn.static_rnn(self.gru_cell,  # 收敛的好慢 相比自己构造层次
+                                                         inputs=x,  #这个输入是一个list，len（list）= 步长 list[0].shape=[batch,input] ?
+                                                         # shape=(42, 50, 100)  ? ("ExpandDims:0", shape=(50, 42, 1), dtype=float32)
+                                                         #initial_state=self.zero_state,
+                                                         # 如果 inputs 为 (batches, steps, inputs) ==> time_major=False
                                                          dtype=tf.float32
                                                          )
-        '''
         print "current state：",current_state
+        print "output0：",states_series         #(50,42,100)                                                            #shape=(50, 42, 100)
         states_series = tf.transpose(states_series, [1, 0, 2])
+        print "0.1",states_series
         last = tf.gather(states_series, int(states_series.get_shape()[0]) - 1)                                          #取最后一个输出
         print "last:",last
+
+        #states_series = tf.reshape(states_series, [-1,RNN_HIDDEN_SIZE])
+        #states_series = tf.reshape(states_series, shape=[BATCH_SIZE, RNN_HIDDEN_SIZE])
         outputs = last
+        #self.end_state = current_state#tf.reshape(current_state, [1,200])
+        print "output1:",outputs
         print "state:",current_state
-        #print "end state:",self.end_state
+#        print "end state:",self.end_state
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
@@ -342,35 +370,3 @@ with tf.Graph().as_default():
 
 print "*" * 20,"Train over","*" * 20
 
-'''
-Result['rnn_pred'] = final_preds
-#Result['mod_rnn_prod'] = list(map(lambda x: -1 if x <1 else 0 if x==1 else 1,final_preds))
-Result['mod_rnn_prod'] = list(map(lambda x: -1 if x <5 else 0 if x==5 else 1,final_preds))
-
-
-Result['rnn_ret'] = Result.mod_rnn_prod*Result['return']
-
-print(confusion_matrix(Result['multi_class'],Result['rnn_pred']))
-print "-" * 20,"Confusion matrix","-" * 20
-
-print(classification_report(Result['class'],Result['mod_rnn_prod']))
-print "-" * 20,"Classification report","-" * 20
-
-print(confusion_matrix(Result['class'],Result['mod_rnn_prod']))
-print "-" * 20,"Confusion matrix2","-" * 20
-
-Res = (Result[-test_size:][['return','nn_ret','rnn_ret','pred_return']]).cumsum()
-print Res.tail(10)
-print "-" * 20,"Return & nn_ret & rnn_ret & pred_return cumsum","-" * 20
-
-Res[0] =0
-Res.plot(figsize=(20,10))
-
-Res.columns =['Market Baseline','Simple Neural Newtwork','My Algo','Logistic Regression (simple ML)','Do Nothing(0)']
-Res.plot(figsize=(20,10),title="Performance of MarketVectors algo over 27 months compared with baselines")
-
-
-Res.columns
-Res.columns =['baseline','logistic_regression','feed_forward_net','rnn_net','do_nothing']
-Res.plot(figsize=(20,10))
-'''

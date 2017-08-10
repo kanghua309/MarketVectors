@@ -59,6 +59,7 @@ def RNN(x, weights, biases):
     print(x)
     x = tf.unstack(x, n_steps, 1)
     print(x)
+    print("--------------")
     # Define a lstm cell with tensorflow
     lstm_cell = rnn.BasicLSTMCell(n_hidden, forget_bias=1.0)
     '''
