@@ -249,6 +249,7 @@ class RNNModel():
         outputs = last
         print "state:",current_state
         #print "end state:",self.end_state
+
         self.logits = tf.contrib.layers.fully_connected(                                                                #最后还用一个全连接输出？
             num_outputs=num_classes,
             inputs=outputs,
