@@ -57,8 +57,10 @@ for f in os.listdir(datapath):
         Res = make_inputs(filepath)
         Final = Final.append(Res)
     idx += 1
-    if idx == 10:
+    if idx == 1000:
         break;
+
+
 print "stock num：",idx
 print Final.head(10)
 print "-" * 20,"Muti-stock table","-" * 20
@@ -178,7 +180,7 @@ from sklearn.metrics import classification_report,confusion_matrix
 
 
 import tensorflow as tf
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'      #disable ts logging
+#os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'      #disable ts logging
 #tf.logging.set_verbosity(tf.logging.ERROR)
 
 #Labeled['tf_class'] = Labeled['multi_class']
@@ -209,13 +211,13 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 RNN_HIDDEN_SIZE=100
 #FIRST_LAYER_SIZE=1000
 #SECOND_LAYER_SIZE=250
-NUM_LAYERS=2
-BATCH_SIZE=50
-NUM_EPOCHS=2 #200
+NUM_LAYERS=1
+BATCH_SIZE=20
+NUM_EPOCHS=200 #200
 lr=0.0003
 NUM_TRAIN_BATCHES = int(len(train[0])/BATCH_SIZE)         #每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(val[1])/BATCH_SIZE)
-ATTN_LENGTH=30
+ATTN_LENGTH=10
 beta=0
 
 #print NUM_TRAIN_BATCHES  #66
@@ -230,10 +232,10 @@ class RNNModel():
             cells = []
             for i in range(NUM_LAYERS):
                 cell = tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE)  #tf.contrib.rnn 下的rnn 要比tf.nn.rnn_cell下的慢好多，新的优化了？ 初始化加不加有何区别？ 会让收敛快点吗？
-                if len(cells)== 0:
+                #if len(cells)== 0:
                     # Add attention wrapper to first layer.
-                    cell = tf.contrib.rnn.AttentionCellWrapper(
-                       cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
+                #    cell = tf.contrib.rnn.AttentionCellWrapper(
+                 #      cell, attn_length=ATTN_LENGTH, state_is_tuple=False)
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=False)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
@@ -267,8 +269,10 @@ class RNNModel():
         print "current state：",current_state
         print "output0：",states_series         #(50,42,100)                                                            #shape=(50, 42, 100)
         states_series = tf.transpose(states_series, [1, 0, 2])
-        print "0.1",states_series
-        last = tf.gather(states_series, int(states_series.get_shape()[0]) - 1)                                          #取最后一个输出
+        print "0.1",states_series,states_series[-1]
+        #last = tf.gather(states_series, int(states_series.get_shape()[0]) - 1)                                          #取最后一个输出
+        last = states_series[-1]                                 #取最后一个输出
+
         print "last:",last
         outputs = last
         print "output1:",outputs
@@ -309,7 +313,7 @@ class RNNModel():
 with tf.Graph().as_default():
     config = tf.ConfigProto()
     config.allow_soft_placement = True
-    config.log_device_placement = False
+    config.log_device_placement = True
     config.gpu_options.allow_growth = True
     config.gpu_options.per_process_gpu_memory_fraction = 0.5
 
@@ -322,7 +326,7 @@ with tf.Graph().as_default():
         loss = 2000
 
         for e in range(NUM_EPOCHS):
-            state = sess.run(model.zero_state)
+            #state = sess.run(model.zero_state)
             #print state
             #print "--------------------------------------"
             epoch_loss = 0
