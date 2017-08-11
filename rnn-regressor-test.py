@@ -68,7 +68,7 @@ def lstm_model(X, y):
 
 # 进行训练
 # 封装之前定义的lstm
-regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/model_3"))
+regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/model_5"))
 # 生成数据
 test_start = TRAINING_EXAMPLES * SAMPLE_GAP
 test_end = (TRAINING_EXAMPLES + TESTING_EXAMPLES) * SAMPLE_GAP
@@ -87,7 +87,13 @@ predicted = [[pred] for pred in regressor.predict(test_X)]
 rmse = np.sqrt(((predicted - test_y) ** 2).mean(axis=0))
 print("Mean Square Error is:%f" % rmse[0])
 
-print predicted
+#print predicted
+
+print np.shape(test_X)
+print test_X
+
+print test_X[-1:]
+print regressor.predict(test_X[-1:])
 
 plot_predicted, = plt.plot(predicted, label='predicted')
 plot_test, = plt.plot(test_y, label='real_sin')
