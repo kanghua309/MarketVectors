@@ -5,7 +5,6 @@ import sys
 import numpy as np
 
 import matplotlib
-
 matplotlib.use('Agg')
 from matplotlib.pyplot import plot, savefig
 from matplotlib import pyplot as plt
@@ -99,101 +98,14 @@ corrs = TargetDF.corr()
 num_stocks = len(TargetDF.columns)
 
 print "num stocks :", num_stocks
-# print np.exp(TargetDF)
-# print (1-np.exp(TargetDF))
-# print (1-np.exp(TargetDF)).sum(1)
-# TotalReturn = ((1-np.exp(TargetDF)).sum(1))/num_stocks # If i put one dollar in each stock at the close, this is how much I'd get back
-# TotalReturn = (1-np.exp(TargetDF))
-# print TotalReturn.head(10)
-# print "-" * 20,"Return of all stock avg? for current day","-" * 20
-
-
-'''
-#天盈利千分之3，亏损千分之4.6 ？
-def labeler(x):
-    #if x>0.0029:
-    #print x
-    x[x > np.log(1.005)] = 1
-    x[x < np.log(0.995)] = -1
-    x[(x != 1) & (x != -1)] = 0
-    #x[x != -1 ] = 0
-    #print "--------------------?"
-    #print x
-    return x
-
-    if x > np.log(1.005):
-        return x[x > np.log(1.005)]
-    #if x<-0.00462:
-    if x < np.log(0.995):
-        return x[x < np.log(0.995)]
-    else:
-        return 0
-
-#MyLabeled = pd.DataFrame()
-MyLabeled = TotalReturn.apply(labeler,1)
-print MyLabeled
-
-Labeled = pd.DataFrame()
-#Labeled['return'] = TotalReturn
-#Labeled['class'] = TotalReturn.apply(labeler,1)
-#print Labeled['class'].head(10)
-print "-" * 20,"Label by return of day","-" * 20
-
-
-
-
-#Labeled['multi_class'] = pd.qcut(TotalReturn,3,labels=range(3))
-#Labeled['multi_class'] = pd.qcut(TotalReturn,11,labels=range(11))
-#print Labeled['multi_class'].head(10)
-#print "-" * 20,"Labeled of multi class","-" * 20
-
-#Labeled['multi_class'] = Labeled['class'] + 1
-#Labeled['multi_class'] = MyLabeled + 1
-
-#print Labeled['multi_class'].head(10)
-print "-" * 20,"Labeled of multi class","-" * 20
-'''
-'''
-到底应该怎么分类 ？
-排序分陈个11个桶，然后5个卖，5个买，一个不动显然不合理！ 必须规定实际return来定买和卖，相对顺序是不合适的？
-！！！
-使用相对顺序而非绝对值，是为了泛化模型吗？
-'''
-
-# print Labeled['class'].value_counts()
-print "-" * 20, "Label distribution", "-" * 20
-# print Labeled['multi_class'].value_counts()
-print "-" * 20, "Qcut multi class distribution", "-" * 20
-
-# Labeled['act_return'] = Labeled['class'] * Labeled['return']                                                            #实际回报是涨跌都取绝对值了，也就是说跌也赚钱的假设吗？
-# print Labeled['act_return'].head(10)
-print "-" * 20, "Acture return from labeled class", "-" * 20
-
-# Labeled[['return','act_return']].cumsum().plot(subplots=True)
-# print Labeled[['return','act_return']].cumsum().head(10)
-print "-" * 20, "Return and acture return cumsum", "-" * 20
 
 test_size = 600
-from sklearn import linear_model
-from sklearn.metrics import classification_report, confusion_matrix
 
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.INFO)
-
-# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'      #disable ts logging
-# tf.logging.set_verbosity(tf.logging.ERROR)
-
-# Labeled['tf_class'] = Labeled['multi_class']
-# Labeled['tf_class'] = Labeled['class']
 num_features = len(InputDF.columns)
-
 print "*" * 50, "Training a rnn network", "*" * 50
-
 num_features = len(InputDF.columns)
-# num_classes = pd.Series(MyLabeled.values.ravel()).nunique()            #???
-
-# train = (InputDF[:-test_size].values,Labeled.tf_class[:-test_size].values)
-# val = (InputDF[-test_size:].values,Labeled.tf_class[-test_size:].values)
 
 train = (InputDF[:-test_size].values, TargetDF[:-test_size].values)
 val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
@@ -237,13 +149,9 @@ def makeGRUCells():
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=True)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
-            #layered_cell = tf.nn.rnn_cell.MultiRNNCell(
-            #    [tf.nn.rnn_cell.GRUCell(num_units=RNN_HIDDEN_SIZE, ) for _ in range(NUM_LAYERS)], state_is_tuple=False) #GRU 和 LSTM 效果近似，速度更快点
-            #attn_cell = tf.contrib.rnn.AttentionCellWrapper(cell=layered_cell,
-            #                                                attn_length=ATTN_LENGTH,                                    # Add attention wrapper to first layer ??
-            #                                                state_is_tuple=False)
-            return attn_cell  # DropoutWrapper 还没加
 
+
+            return attn_cell
 def lstm_model(X, y):
     cell =  makeGRUCells()
     #cell = tf.contrib.rnn.MultiRNNCell([LstmCell() for _ in range(NUM_LAYERS)])
@@ -279,15 +187,10 @@ def lstm_model(X, y):
     return predictions, loss, train_op
 
 
-
 from tensorflow.contrib.learn.python.learn.estimators.estimator import SKCompat
 learn = tf.contrib.learn
 
 # 生成数据
-#test_start = TRAINING_EXAMPLES * SAMPLE_GAP
-#test_end = (TRAINING_EXAMPLES + TESTING_EXAMPLES) * SAMPLE_GAP
-#train = (InputDF[:-test_size].values, TargetDF[:-test_size].values)
-#val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
 train_X, train_y = InputDF[:-test_size].values,TargetDF[:-test_size].values
 test_X, test_y = InputDF[-test_size:].values,TargetDF[-test_size:].values
 
@@ -302,16 +205,6 @@ print np.shape(train_X),np.shape(train_y)
 
 #print tf.reshape(train_y, [-1])
 print "--------------------------------------------"
-# create a lstm instance and validation monitor
-
-
-
-
-
-
-#validation_monitor = learn.monitors.ValidationMonitor(test_X, test_y,
-#                                                     every_n_steps=PRINT_STEPS,
-#                                                     early_stopping_rounds=1000)
 PRINT_STEPS = 100
 validation_monitor = learn.monitors.ValidationMonitor(test_X, test_y,
                                                      every_n_steps=PRINT_STEPS,
@@ -325,13 +218,6 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
                                      save_checkpoints_secs=None,
                                      save_summary_steps=100,
                                      )))
-
-
-
-
-
-
-
 
 #regressor.fit(train_X, train_y, batch_size=1, steps=1000,
 #              monitors=[validation_monitor])
