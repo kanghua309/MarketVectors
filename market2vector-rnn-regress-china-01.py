@@ -6,10 +6,6 @@ import numpy as np
 
 import matplotlib
 matplotlib.use('Agg')
-from matplotlib.pyplot import plot, savefig
-from matplotlib import pyplot as plt
-
-
 pd.set_option('display.width', 800)
 
 ret = lambda x, y: np.log(y / x)  # Log return
@@ -24,18 +20,13 @@ def getStock(ticker):
     conn.close()
     return df
 
-def _getStock(conn,ticker):
-    query = "select * from '%s' order by date" % ticker
-    df = pd.read_sql(query, conn)
-    df = df.set_index('date')
-    return df
 
 print getStock("603002").head(10)
 print "-" * 20, "Example db data", "-" * 20
 
 
-def make_db_inputs(conn,ticker):
-    D = _getStock(conn,ticker)
+def make_db_inputs(ticker):
+    D = getStock(ticker)
     D.rename(
         columns={
             'open': 'o',
@@ -61,7 +52,7 @@ def make_db_inputs(conn,ticker):
     return Res
 
 conn = sqlite3.connect('History.db', check_same_thread=False)
-Res = make_db_inputs(conn,"603002")
+Res = make_db_inputs("603002")
 conn.close()
 print Res.head(10)
 print "-" * 20, "new res ", "-" * 20
@@ -77,12 +68,11 @@ def getAllStockSaved():
 Final = pd.DataFrame()
 tickers = getAllStockSaved()
 idx = 0
-conn = sqlite3.connect('History.db', check_same_thread=False)
 for ticker in list(tickers.name):
-    Res = make_db_inputs(conn,ticker)
+    Res = make_db_inputs(ticker)
     Final = Final.append(Res)
     idx += 1
-    if idx == 10:
+    if idx == 10000:
         break;
 conn.close()
 print "stock num：", idx
@@ -120,7 +110,7 @@ print "Input cols ... "
 print target_cols
 print "Target cols ...",len(clean_and_flat) #6473?
 size = len(clean_and_flat)
-test_size = 200
+test_size = 100
 InputDF = clean_and_flat[input_cols][:size]
 TargetDF = clean_and_flat[target_cols][:size]
 print InputDF.head(10)
@@ -185,8 +175,6 @@ def makeGRUCells():
                 cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=True)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
-
-
             return attn_cell
 def lstm_model(X, y):
     cell =  makeGRUCells()
@@ -219,7 +207,7 @@ def lstm_model(X, y):
     print "lost:",loss
     train_op = tf.contrib.layers.optimize_loss(loss, tf.contrib.framework.get_global_step(),
                                                optimizer="Adagrad",
-                                               learning_rate=0.1)
+                                               learning_rate=0.001)
     return predictions, loss, train_op
 
 
@@ -229,14 +217,12 @@ learn = tf.contrib.learn
 # 生成数据
 train_X, train_y = InputDF[:-test_size].values,TargetDF[:-test_size].values
 test_X, test_y = InputDF[-test_size:].values,TargetDF[-test_size:].values
-
 # https://github.com/XRayCheng/tensorflow_iris_fix
 print "--------------------------------------------"
 train_X = train_X.astype(np.float32)
 train_y = train_y.astype(np.float32)
 test_X = test_X.astype(np.float32)
 test_y = test_y.astype(np.float32)
-
 print np.shape(train_X),np.shape(train_y)
 
 #print tf.reshape(train_y, [-1])
@@ -259,7 +245,7 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #              monitors=[validation_monitor])
 #nput_fn = tf.contrib.learn.io.numpy_input_fn({"x":train_X}, train_y, batch_size=50,
 #                                              num_epochs=1000)
-regressor.fit(train_X, train_y,batch_size=50,steps=100)
+regressor.fit(train_X, train_y,batch_size=50,steps=10000)
 
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
 # 计算预测值
