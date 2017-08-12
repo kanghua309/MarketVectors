@@ -87,7 +87,7 @@ input_cols = list(filter(lambda x: 'c1_c0' not in x, clean_and_flat.columns.valu
 print input_cols
 print "Input cols ... "
 print target_cols
-print "Target cols ..."
+print "Target cols ...",len(clean_and_flat)
 InputDF = clean_and_flat[input_cols][:3900]
 TargetDF = clean_and_flat[target_cols][:3900]
 print InputDF.head(10)
@@ -99,6 +99,7 @@ corrs = TargetDF.corr()
 num_stocks = len(TargetDF.columns)
 
 print "num stocks :", num_stocks
+print "last train date  :", TargetDF.index[-1]
 # print np.exp(TargetDF)
 # print (1-np.exp(TargetDF))
 # print (1-np.exp(TargetDF)).sum(1)

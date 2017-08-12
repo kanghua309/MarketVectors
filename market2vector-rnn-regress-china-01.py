@@ -9,62 +9,89 @@ matplotlib.use('Agg')
 from matplotlib.pyplot import plot, savefig
 from matplotlib import pyplot as plt
 
+
 pd.set_option('display.width', 800)
-
-datapath = './daily'
-filepath = os.path.join(datapath, os.listdir('./daily')[0])
-
-import re
-
-ticker_regex = re.compile('.+_(?P<ticker>.+)\.csv')
-get_ticker = lambda x: ticker_regex.match(x).groupdict()['ticker']
-print(filepath, get_ticker(filepath))
 
 ret = lambda x, y: np.log(y / x)  # Log return
 zscore = lambda x: (x - x.mean()) / x.std()  # zscore
 
-D = pd.read_csv(filepath, header=None, names=['UNK', 'o', 'h', 'l', 'c', 'v'])  # Load the dataframe with headers
-print D.head(10)
-print "-" * 20, "Example csv data", "-" * 20
+import sqlite3
+def getStock(ticker):
+    conn = sqlite3.connect('/data/kanghua/workshop/collect/History.db', check_same_thread=False)
+    query = "select * from '%s' order by date" % ticker
+    df = pd.read_sql(query, conn)
+    df = df.set_index('date')
+    conn.close()
+    return df
+
+def _getStock(conn,ticker):
+    query = "select * from '%s' order by date" % ticker
+    df = pd.read_sql(query, conn)
+    df = df.set_index('date')
+    return df
+
+print getStock("603002").head(10)
+print "-" * 20, "Example db data", "-" * 20
 
 
-# 各指标都是和open价格做比值，在标准化分
-def make_inputs(filepath):
-    D = pd.read_csv(filepath, header=None, names=['UNK', 'o', 'h', 'l', 'c', 'v'])  # Load the dataframe with headers
-    D.index = pd.to_datetime(D.index, format='%Y%m%d')  # Set the indix to a datetime
+def make_db_inputs(conn,ticker):
+    D = _getStock(conn,ticker)
+    D.rename(
+        columns={
+            'open': 'o',
+            'high': 'h',
+            'low': 'l',
+            'close': 'c',
+            'volume': 'v',
+        },
+        inplace=True,
+    )
+    #D = pd.read_csv(filepath, header=None, names=['UNK', 'o', 'h', 'l', 'c', 'v'])  # Load the dataframe with headers
+    D.index = pd.to_datetime(D.index, format='%Y-%m-%d')  # Set the indix to a datetime
     Res = pd.DataFrame()
-    ticker = get_ticker(filepath)
-
+    #ticker = get_ticker(filepath)
     Res['c_2_o'] = zscore(ret(D.o, D.c))
     Res['h_2_o'] = zscore(ret(D.o, D.h))
     Res['l_2_o'] = zscore(ret(D.o, D.l))
     Res['c_2_h'] = zscore(ret(D.h, D.c))
     Res['h_2_l'] = zscore(ret(D.h, D.l))
-    Res['c1_c0'] = ret(D.c, D.c.shift(-1)).fillna(0)  # Tommorows return
+    Res['c1_c0'] = ret(D.c, D.c.shift(-5)).fillna(0)  # Tommorows return   ### -1 -> -5 和未来比
     Res['vol'] = zscore(D.v)
     Res['ticker'] = ticker
     return Res
 
+conn = sqlite3.connect('History.db', check_same_thread=False)
+Res = make_db_inputs(conn,"603002")
+conn.close()
+print Res.head(10)
+print "-" * 20, "new res ", "-" * 20
 
-Res = make_inputs(filepath)
-# print Res.head()
-# print Res.corr()
+
+def getAllStockSaved():
+    conn = sqlite3.connect('History.db', check_same_thread=False)
+    query = "select name from sqlite_master where type='table' order by name"
+    alreadylist = pd.read_sql(query, conn)
+    conn.close()
+    return alreadylist
 
 Final = pd.DataFrame()
+tickers = getAllStockSaved()
 idx = 0
-for f in os.listdir(datapath):
-    filepath = os.path.join(datapath, f)
-    if filepath.endswith('.csv'):
-        Res = make_inputs(filepath)
-        Final = Final.append(Res)
+conn = sqlite3.connect('History.db', check_same_thread=False)
+for ticker in list(tickers.name):
+    Res = make_db_inputs(conn,ticker)
+    Final = Final.append(Res)
     idx += 1
-    if idx == 10000:
+    if idx == 10:
         break;
-
+conn.close()
 print "stock num：", idx
 print Final.head(10)
-print "-" * 20, "Muti-stock table", "-" * 20
+print Final.index
+print "-" * 20, "New Muti-stock table", "-" * 20
 
+
+"-----------------------------------------------------------------------------------------------------------------------"
 pivot_columns = Final.columns[:-1]
 # P = Final.pivot_table(index=Final.index,columns='ticker',values=pivot_columns) # Make a pivot table from the data
 P = Final.pivot_table(index=Final.index, columns='ticker', values=['c_2_o', 'h_2_o', 'l_2_o', 'c_2_h', 'h_2_l', 'c1_c0',
@@ -79,27 +106,36 @@ P = P.sort_index(axis=1)  # Sort by columns
 print P.head(10)
 print "-" * 20, "Flat stock index", "-" * 20
 
-clean_and_flat = P.dropna(1)  # 去掉0列？
+#clean_and_flat = P.dropna(1)  # 去掉0列？
+clean_and_flat = P.fillna(method='bfill')  # 去掉0列？
+
 print clean_and_flat.head(10)
+
+print clean_and_flat.tail(10)
+print clean_and_flat
 target_cols = list(filter(lambda x: 'c1_c0' in x, clean_and_flat.columns.values))
 input_cols = list(filter(lambda x: 'c1_c0' not in x, clean_and_flat.columns.values))
 print input_cols
 print "Input cols ... "
 print target_cols
-print "Target cols ..."
-InputDF = clean_and_flat[input_cols][:3900]
-TargetDF = clean_and_flat[target_cols][:3900]
+print "Target cols ...",len(clean_and_flat) #6473?
+size = len(clean_and_flat)
+test_size = 200
+InputDF = clean_and_flat[input_cols][:size]
+TargetDF = clean_and_flat[target_cols][:size]
 print InputDF.head(10)
+print InputDF.tail(10)
+
 print "InputDF ..."
-print TargetDF.head(10)
+print TargetDF.tail(10)
 print "TargetDF ..."
 corrs = TargetDF.corr()
 
 num_stocks = len(TargetDF.columns)
 
 print "num stocks :", num_stocks
-
-test_size = 600
+print "last train date  :", TargetDF.index[-1]
+print "------------------------------------------------------------------------------------------------------------------------"
 
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -223,7 +259,7 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #              monitors=[validation_monitor])
 #nput_fn = tf.contrib.learn.io.numpy_input_fn({"x":train_X}, train_y, batch_size=50,
 #                                              num_epochs=1000)
-regressor.fit(train_X, train_y,batch_size=50,steps=10000)
+regressor.fit(train_X, train_y,batch_size=50,steps=100)
 
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
 # 计算预测值
@@ -242,5 +278,13 @@ print "--------------------- predict -----------------------"
 p = regressor.predict(test_X[-1:])
 print np.shape(p)
 print np.sort(p)
+
+
+
+from datetime import datetime as dt
+date = clean_and_flat.index[-1]
+df = pd.DataFrame(np.sort(p),index=[date],columns=target_cols)
+df.index.name = "date"
+print df
 print "*" * 20, "Train over", "*" * 20
 

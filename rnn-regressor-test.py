@@ -24,8 +24,8 @@ TIMESTEPS = 50  # 循环神经网络的截断长度
 TRAINING_STEPS = 10000  # 训练轮数
 BATCH_SIZE = 100  # batch大小
 
-TRAINING_EXAMPLES = 10000000  # 训练数据个数
-TESTING_EXAMPLES = 100000  # 测试数据个数
+TRAINING_EXAMPLES = 10000  # 训练数据个数
+TESTING_EXAMPLES = 100  # 测试数据个数
 SAMPLE_GAP = 0.01  # 采样间隔
 
 
@@ -78,11 +78,12 @@ test_X, test_y = generate_data(np.sin(np.linspace(test_start, test_end, TESTING_
 print "--------------------------------------------"
 print np.shape(train_X)
 print np.shape(train_y)
+print np.shape(test_y),test_y
 print "--------------------------------------------"
 regressor.fit(train_X, train_y, batch_size=BATCH_SIZE, steps=TRAINING_STEPS)
 # 计算预测值
 predicted = [[pred] for pred in regressor.predict(test_X)]
-
+print "predicted:",predicted
 # 计算MSE
 rmse = np.sqrt(((predicted - test_y) ** 2).mean(axis=0))
 print("Mean Square Error is:%f" % rmse[0])
@@ -92,7 +93,7 @@ print("Mean Square Error is:%f" % rmse[0])
 print np.shape(test_X)
 print test_X
 
-print test_X[-1:]
+print np.shape(test_X[-1:])
 print regressor.predict(test_X[-1:])
 
 plot_predicted, = plt.plot(predicted, label='predicted')
