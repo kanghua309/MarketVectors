@@ -286,5 +286,13 @@ date = clean_and_flat.index[-1]
 df = pd.DataFrame(np.sort(p),index=[date],columns=target_cols)
 df.index.name = "date"
 print df
+conn = sqlite3.connect('History.db', check_same_thread=False)
+try:
+    df.to_sql("predict",conn, if_exists='append')
+except Exception, e:
+    print "exception :",e
+
+conn.close()
+
 print "*" * 20, "Train over", "*" * 20
 
