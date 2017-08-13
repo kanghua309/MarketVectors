@@ -131,6 +131,8 @@ clean_and_flat = P.fillna(method='bfill')  # 去掉0列？
 print "raw df check nan after bifll :",clean_and_flat.isnull().values.any()
 clean_and_flat = clean_and_flat.fillna(method='pad')  # 去掉0列？
 print "raw df check nan after pad :",clean_and_flat.isnull().values.any()
+clean_and_flat = clean_and_flat.dropna(1)
+print "raw df check nan after dropna :",clean_and_flat.isnull().values.any()
 
 print clean_and_flat.head(10)
 print clean_and_flat.tail(10)
@@ -181,7 +183,7 @@ RNN_HIDDEN_SIZE = 100
 # FIRST_LAYER_SIZE=1000
 # SECOND_LAYER_SIZE=250
 NUM_LAYERS = 2
-BATCH_SIZE = 50
+BATCH_SIZE = 25
 NUM_EPOCHS = 200  # 200
 lr = 0.0003
 NUM_TRAIN_BATCHES = int(len(train[0]) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
@@ -239,7 +241,7 @@ def lstm_model(X, y):
     print "lost:",loss
     train_op = tf.contrib.layers.optimize_loss(loss, tf.contrib.framework.get_global_step(),
                                                optimizer="Adagrad",
-                                               learning_rate=0.001)
+                                               learning_rate=lr)
     return predictions, loss, train_op
 
 
@@ -258,7 +260,9 @@ test_y = test_y.astype(np.float32)
 print np.shape(train_X),np.shape(train_y)
 
 #print tf.reshape(train_y, [-1])
+start = datetime.datetime.now()
 print "--------------------------------------------"
+print start
 PRINT_STEPS = 100
 validation_monitor = learn.monitors.ValidationMonitor(test_X, test_y,
                                                      every_n_steps=PRINT_STEPS,
@@ -268,7 +272,7 @@ validation_monitor = learn.monitors.ValidationMonitor(test_X, test_y,
 # 封装之前定义的lstm
 regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/model_0",
                                      config=tf.contrib.learn.RunConfig(
-                                     save_checkpoints_steps=50,
+                                     save_checkpoints_steps=100,
                                      save_checkpoints_secs=None,
                                      save_summary_steps=100,
                                      )))
@@ -277,7 +281,7 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #              monitors=[validation_monitor])
 #nput_fn = tf.contrib.learn.io.numpy_input_fn({"x":train_X}, train_y, batch_size=50,
 #                                              num_epochs=1000)
-regressor.fit(train_X, train_y,batch_size=50,steps=10000)
+regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= (NUM_TRAIN_BATCHES/BATCH_SIZE) * NUM_EPOCHS )  # steps=train_labels.shape[0]/batch_size * epochs,
 
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
 # 计算预测值
@@ -311,6 +315,7 @@ except Exception, e:
     print "exception :",e
 
 conn.close()
-
+end = datetime.datetime.now()
 print "*" * 20, "Train over", "*" * 20
+print end
 
