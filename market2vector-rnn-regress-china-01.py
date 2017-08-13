@@ -144,9 +144,11 @@ print "Input cols ... "
 print target_cols
 print "Target cols ...",len(clean_and_flat) #6473?
 size = len(clean_and_flat)
-test_size = 100
-InputDF = clean_and_flat[input_cols][:size]
-TargetDF = clean_and_flat[target_cols][:size]
+
+#InputDF = clean_and_flat[input_cols][:size]
+#TargetDF = clean_and_flat[target_cols][:size]
+InputDF = clean_and_flat[input_cols]
+TargetDF = clean_and_flat[target_cols]
 print InputDF.head(10)
 print InputDF.tail(10)
 
@@ -170,7 +172,8 @@ num_features = len(InputDF.columns)
 #train = (InputDF[:-test_size].values, TargetDF[:-test_size].values)
 #val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
 
-used_size = 1000
+used_size = 500
+test_size = 100
 #train = (InputDF[-used_size:].values, TargetDF[-used_size:].values)
 #val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
 # 生成数据
@@ -182,22 +185,18 @@ train_X = train_X.astype(np.float32)
 train_y = train_y.astype(np.float32)
 test_X = test_X.astype(np.float32)
 test_y = test_y.astype(np.float32)
+
 print np.shape(train_X),np.shape(train_y)
+num_stocks = len(TargetDF.columns)
 
-
-print InputDF[-used_size:].tail(10)
-print np.shape(TargetDF[-test_size:].values)
 print "Data count:",len(train_X)  # 3300 个股票日？ 股票没有那么多,500个
 print "Feather count:", num_features
-num_stocks = len(TargetDF.columns)
 print "Stocks count:", num_stocks
+print InputDF[-used_size:].tail(10)
 
-print np.shape(TargetDF[-test_size:].values), np.shape(InputDF[-test_size:].values)
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
 
 RNN_HIDDEN_SIZE = 100
-# FIRST_LAYER_SIZE=1000
-# SECOND_LAYER_SIZE=250
 NUM_LAYERS = 2
 BATCH_SIZE = 25
 NUM_EPOCHS = 200  # 200
@@ -287,7 +286,8 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #              monitors=[validation_monitor])
 #nput_fn = tf.contrib.learn.io.numpy_input_fn({"x":train_X}, train_y, batch_size=50,
 #                                              num_epochs=1000)
-regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= (NUM_TRAIN_BATCHES/BATCH_SIZE) * NUM_EPOCHS )  # steps=train_labels.shape[0]/batch_size * epochs,
+print "train step: ",NUM_TRAIN_BATCHES * NUM_EPOCHS
+regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= NUM_TRAIN_BATCHES * NUM_EPOCHS )  # steps=train_labels.shape[0]/batch_size * epochs,
 
 #http://blog.mdda.net/ai/2017/02/25/estimator-input-fn 新旧接口之不同
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
