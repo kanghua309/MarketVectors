@@ -95,7 +95,7 @@ def process(ticker):
         counter += 1
         #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
         if counter % 5 == 1:
-            "get counter:%s" % (counter)
+            print "get counter:%s" % (counter)
     counter_lock.release()  # 使用完counter资源必须要将这个锁打开，让其他线程使用
 
 begin = datetime.datetime.now()
