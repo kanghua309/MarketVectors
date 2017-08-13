@@ -13,7 +13,7 @@ zscore = lambda x: (x - x.mean()) / x.std()  # zscore
 
 import sqlite3
 def getStock(ticker):
-    conn = sqlite3.connect('History.db', check_same_thread=False)
+    conn = sqlite3.connect('History.db', check_same_thread=True)
     query = "select * from '%s' order by date" % ticker
     df = pd.read_sql(query, conn)
     df = df.set_index('date')
@@ -51,19 +51,22 @@ def make_db_inputs(ticker):
     Res['ticker'] = ticker
     return Res
 
-conn = sqlite3.connect('History.db', check_same_thread=False)
+#conn = sqlite3.connect('History.db', check_same_thread=False)
 Res = make_db_inputs("603002")
-conn.close()
+#conn.close()
 print Res.head(10)
+print Res.tail(10)
+
 print "-" * 20, "new res ", "-" * 20
 
 
 def getAllStockSaved():
-    conn = sqlite3.connect('History.db', check_same_thread=False)
+    conn = sqlite3.connect('History.db', check_same_thread=True)
     query = "select name from sqlite_master where type='table' order by name"
     alreadylist = pd.read_sql(query, conn)
     conn.close()
     return alreadylist
+
 
 
 '''
@@ -83,30 +86,32 @@ from multiprocessing.dummy import Pool as ThreadPool
 import threading
 import datetime
 Final = pd.DataFrame()
-tickers = getAllStockSaved()
-print("tickers count:",len(tickers))
 counter = 0
 counter_lock = threading.Lock()
 def process(ticker):
     Res = make_db_inputs(ticker)
-    global Final,counter, counter_lock
-    Final = Final.append(Res)
+    global Final,counter,counter_lock
+    #Final = Final.append(Res)
     if counter_lock.acquire():  # 当需要独占counter资源时，必须先锁定
+        Final = Final.append(Res)
         counter += 1
         #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
-        if counter % 5 == 1:
+        if (counter % 50) == 0:
             print "get counter:%s" % (counter)
     counter_lock.release()  # 使用完counter资源必须要将这个锁打开，让其他线程使用
 
 begin = datetime.datetime.now()
+tickers = getAllStockSaved()
+print("tickers count:",len(tickers),len(tickers.name[:-1]))
+#print tickers.name[:-1]
 pool = ThreadPool(8)  # 4
-pool.map(process,tickers.name)
+pool.map(process,tickers.name[:-1]) #predict table skip
 pool.close()
 pool.join()
 end = datetime.datetime.now()
 print "load ticker from db time:", end - begin
-print Final.head(10)
-print Final.index
+#print Final.head(10)
+#print Final.index
 print "-" * 20, "New Muti-stock table", "-" * 20
 
 
@@ -115,14 +120,14 @@ pivot_columns = Final.columns[:-1]
 # P = Final.pivot_table(index=Final.index,columns='ticker',values=pivot_columns) # Make a pivot table from the data
 P = Final.pivot_table(index=Final.index, columns='ticker', values=['c_2_o', 'h_2_o', 'l_2_o', 'c_2_h', 'h_2_l', 'c1_c0',
                                                                    'vol'])  # Make a pivot table from the data
-print P.head(10)
+#print P.head(10)
 print "-" * 20, "Pivot muti-stock table", "-" * 20
 
 mi = P.columns.tolist()
 new_ind = pd.Index(e[1] + '_' + e[0] for e in mi)
 P.columns = new_ind
 P = P.sort_index(axis=1)  # Sort by columns
-print P.head(10)
+#print P.head(10)
 print "-" * 20, "Flat stock index", "-" * 20
 
 #clean_and_flat = P.dropna(1)  # 去掉0列？
@@ -134,34 +139,29 @@ print "raw df check nan after pad :",clean_and_flat.isnull().values.any()
 clean_and_flat = clean_and_flat.dropna(1)
 print "raw df check nan after dropna :",clean_and_flat.isnull().values.any()
 
-print clean_and_flat.head(10)
-print clean_and_flat.tail(10)
 
 target_cols = list(filter(lambda x: 'c1_c0' in x, clean_and_flat.columns.values))
 input_cols = list(filter(lambda x: 'c1_c0' not in x, clean_and_flat.columns.values))
-print input_cols
-print "Input cols ... "
-print target_cols
-print "Target cols ...",len(clean_and_flat) #6473?
+#print input_cols
+#print "Input cols ... "
+#print target_cols
+#print "Target cols ...",len(clean_and_flat) #6473?
 size = len(clean_and_flat)
+InputDF = clean_and_flat[input_cols][:size]
+TargetDF = clean_and_flat[target_cols][:size]
 
-#InputDF = clean_and_flat[input_cols][:size]
-#TargetDF = clean_and_flat[target_cols][:size]
-InputDF = clean_and_flat[input_cols]
-TargetDF = clean_and_flat[target_cols]
-print InputDF.head(10)
-print InputDF.tail(10)
-
-print "InputDF ..."
-print TargetDF.tail(10)
-print "TargetDF ..."
+#print InputDF.head(10)
+#print InputDF.tail(10)
+#print "InputDF ..."
+#print TargetDF.tail(10)
+#print "TargetDF ..."
 #corrs = TargetDF.corr()
 
 num_stocks = len(TargetDF.columns)
 
 print "num stocks :", num_stocks
 print "last train date  :", TargetDF.index[-1]
-print "------------------------------------------------------------------------------------------------------------------------"
+print "first train date :", TargetDF.index[0]
 
 import tensorflow as tf
 tf.logging.set_verbosity(tf.logging.INFO)
@@ -180,30 +180,33 @@ test_size = 100
 train_X, train_y =InputDF[-used_size:].values, TargetDF[-used_size:].values
 test_X, test_y = InputDF[-test_size:].values, TargetDF[-test_size:].values #TODO，
 # https://github.com/XRayCheng/tensorflow_iris_fix
-print "--------------------------------------------"
 train_X = train_X.astype(np.float32)
 train_y = train_y.astype(np.float32)
 test_X = test_X.astype(np.float32)
 test_y = test_y.astype(np.float32)
 
 print np.shape(train_X),np.shape(train_y)
+print "Train Set <X:y> shape",
 num_stocks = len(TargetDF.columns)
-
 print "Data count:",len(train_X)  # 3300 个股票日？ 股票没有那么多,500个
 print "Feather count:", num_features
 print "Stocks count:", num_stocks
-print InputDF[-used_size:].tail(10)
+print InputDF[-used_size:].head(5)
+print InputDF[-used_size:].tail(5)
+print TargetDF[-used_size:].head(5)
+print TargetDF[-used_size:].tail(5)
 
 from tensorflow.contrib.layers.python.layers.initializers import xavier_initializer
 
 RNN_HIDDEN_SIZE = 100
 NUM_LAYERS = 2
 BATCH_SIZE = 25
-NUM_EPOCHS = 200  # 200
-lr = 0.0003
+NUM_EPOCHS = 100  # 200
+lr = 0.001
 NUM_TRAIN_BATCHES = int(len(train_X) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(test_X) / BATCH_SIZE)
 ATTN_LENGTH = 10
+dropout_keep_prob=0.75
 beta = 0
 
 
@@ -221,7 +224,7 @@ def makeGRUCells():
                       cell, attn_length=ATTN_LENGTH, state_is_tuple=True)
                 #attention 很奇怪，加入后state_size: 12600 # 一层4400 - 不加入就300
                 #必须false，True 比错
-                cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=0.5)
+                cell = tf.nn.rnn_cell.DropoutWrapper(cell,output_keep_prob=dropout_keep_prob)
                 cells.append(cell)
             attn_cell =  tf.nn.rnn_cell.MultiRNNCell(cells, state_is_tuple=True)  #GRUCell必须false，True 比错 ,如果是BasicLSTMCell 必须True
             return attn_cell
@@ -286,7 +289,7 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #              monitors=[validation_monitor])
 #nput_fn = tf.contrib.learn.io.numpy_input_fn({"x":train_X}, train_y, batch_size=50,
 #                                              num_epochs=1000)
-print "train step: ",NUM_TRAIN_BATCHES * NUM_EPOCHS
+print "total train step: ",NUM_TRAIN_BATCHES * NUM_EPOCHS
 regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= NUM_TRAIN_BATCHES * NUM_EPOCHS )  # steps=train_labels.shape[0]/batch_size * epochs,
 
 #http://blog.mdda.net/ai/2017/02/25/estimator-input-fn 新旧接口之不同
