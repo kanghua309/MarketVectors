@@ -13,7 +13,6 @@ zscore = lambda x: (x - x.mean()) / x.std()  # zscore
 
 import sqlite3
 def getStock(ticker):
-    print ".....,0",ticker
     conn = sqlite3.connect('History.db', check_same_thread=True)
     query = "select * from '%s' order by date" % ticker
     df = pd.read_sql(query, conn)
