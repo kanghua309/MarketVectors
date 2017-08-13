@@ -93,12 +93,14 @@ def process(ticker):
     Final = Final.append(Res)
     if counter_lock.acquire():  # 当需要独占counter资源时，必须先锁定
         counter += 1
-        print (counter % 5 == 1) and "get counter:%s" % (counter)
+        #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
+        if counter % 5 == 1:
+            "get counter:%s" % (counter)
     counter_lock.release()  # 使用完counter资源必须要将这个锁打开，让其他线程使用
 
 begin = datetime.datetime.now()
 pool = ThreadPool(8)  # 4
-pool.map(process,tickers.name[:100])
+pool.map(process,tickers.name)
 pool.close()
 pool.join()
 end = datetime.datetime.now()
