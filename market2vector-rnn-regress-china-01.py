@@ -13,6 +13,7 @@ zscore = lambda x: (x - x.mean()) / x.std()  # zscore
 
 import sqlite3
 def getStock(ticker):
+    print ".....,0",ticker
     conn = sqlite3.connect('History.db', check_same_thread=True)
     query = "select * from '%s' order by date" % ticker
     df = pd.read_sql(query, conn)
@@ -26,6 +27,7 @@ print "-" * 20, "Example db data", "-" * 20
 
 
 def make_db_inputs(ticker):
+
     D = getStock(ticker)
     D.rename(
         columns={
@@ -39,8 +41,11 @@ def make_db_inputs(ticker):
     )
     #D = pd.read_csv(filepath, header=None, names=['UNK', 'o', 'h', 'l', 'c', 'v'])  # Load the dataframe with headers
     D.index = pd.to_datetime(D.index, format='%Y-%m-%d')  # Set the indix to a datetime
+
+
     Res = pd.DataFrame()
-    #ticker = get_ticker(filepath)
+#ticker = get_ticker(filepath)
+
     Res['c_2_o'] = zscore(ret(D.o, D.c))
     Res['h_2_o'] = zscore(ret(D.o, D.h))
     Res['l_2_o'] = zscore(ret(D.o, D.l))
@@ -49,13 +54,14 @@ def make_db_inputs(ticker):
     Res['c1_c0'] = ret(D.c, D.c.shift(-5)).fillna(0)  # Tommorows return   ### -1 -> -5 和未来比
     Res['vol'] = zscore(D.v)
     Res['ticker'] = ticker
+
     return Res
 
 #conn = sqlite3.connect('History.db', check_same_thread=False)
-Res = make_db_inputs("603002")
+#Res = make_db_inputs("603002")
 #conn.close()
-print Res.head(10)
-print Res.tail(10)
+#print Res.head(10)
+#print Res.tail(10)
 
 print "-" * 20, "new res ", "-" * 20
 
@@ -92,18 +98,19 @@ def process(ticker):
     Res = make_db_inputs(ticker)
     global Final,counter,counter_lock
     #Final = Final.append(Res)
-    if counter_lock.acquire():  # 当需要独占counter资源时，必须先锁定
-        Final = Final.append(Res)
-        counter += 1
-        #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
-        if (counter % 50) == 0:
-            print "get counter:%s" % (counter)
+    counter_lock.acquire()  # 当需要独占counter资源时，必须先锁定
+    print Res.head(10)
+    Final = Final.append(Res)
+    counter += 1
+    #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
+    if (counter % 50) == 0:
+        print "get counter:%s" % (counter)
     counter_lock.release()  # 使用完counter资源必须要将这个锁打开，让其他线程使用
 
 begin = datetime.datetime.now()
 tickers = getAllStockSaved()
 print("tickers count:",len(tickers),len(tickers.name[:-1]))
-#print tickers.name[:-1]
+print tickers.name[:-1]
 pool = ThreadPool(8)  # 4
 pool.map(process,tickers.name[:-1]) #predict table skip
 pool.close()
@@ -114,7 +121,8 @@ print "load ticker from db time:", end - begin
 #print Final.index
 print "-" * 20, "New Muti-stock table", "-" * 20
 
-
+print Final.head(10)
+print Final.tail(10)
 "-----------------------------------------------------------------------------------------------------------------------"
 pivot_columns = Final.columns[:-1]
 # P = Final.pivot_table(index=Final.index,columns='ticker',values=pivot_columns) # Make a pivot table from the data
