@@ -13,7 +13,7 @@ zscore = lambda x: (x - x.mean()) / x.std()  # zscore
 
 import sqlite3
 def getStock(ticker):
-    conn = sqlite3.connect('/data/kanghua/workshop/collect/History.db', check_same_thread=False)
+    conn = sqlite3.connect('History.db', check_same_thread=False)
     query = "select * from '%s' order by date" % ticker
     df = pd.read_sql(query, conn)
     df = df.set_index('date')
@@ -65,17 +65,44 @@ def getAllStockSaved():
     conn.close()
     return alreadylist
 
-Final = pd.DataFrame()
-tickers = getAllStockSaved()
+
+'''
 idx = 0
 for ticker in list(tickers.name):
     Res = make_db_inputs(ticker)
     Final = Final.append(Res)
     idx += 1
+    if idx % 5 == 1:
+        print "load tick:",idx
     if idx == 10000:
         break;
-conn.close()
 print "stock num：", idx
+'''
+
+from multiprocessing.dummy import Pool as ThreadPool
+import threading
+import datetime
+Final = pd.DataFrame()
+tickers = getAllStockSaved()
+print("tickers count:",len(tickers))
+counter = 0
+counter_lock = threading.Lock()
+def process(ticker):
+    Res = make_db_inputs(ticker)
+    global Final,counter, counter_lock
+    Final = Final.append(Res)
+    if counter_lock.acquire():  # 当需要独占counter资源时，必须先锁定
+        counter += 1
+        print (counter % 5 == 1) and "get counter:%s" % (counter)
+    counter_lock.release()  # 使用完counter资源必须要将这个锁打开，让其他线程使用
+
+begin = datetime.datetime.now()
+pool = ThreadPool(8)  # 4
+pool.map(process,tickers.name[:100])
+pool.close()
+pool.join()
+end = datetime.datetime.now()
+print "load ticker from db time:", end - begin
 print Final.head(10)
 print Final.index
 print "-" * 20, "New Muti-stock table", "-" * 20
@@ -97,12 +124,15 @@ print P.head(10)
 print "-" * 20, "Flat stock index", "-" * 20
 
 #clean_and_flat = P.dropna(1)  # 去掉0列？
+print "raw df check nan:",P.isnull().values.any()
 clean_and_flat = P.fillna(method='bfill')  # 去掉0列？
+print "raw df check nan after bifll :",clean_and_flat.isnull().values.any()
+clean_and_flat = clean_and_flat.fillna(method='pad')  # 去掉0列？
+print "raw df check nan after pad :",clean_and_flat.isnull().values.any()
 
 print clean_and_flat.head(10)
-
 print clean_and_flat.tail(10)
-print clean_and_flat
+
 target_cols = list(filter(lambda x: 'c1_c0' in x, clean_and_flat.columns.values))
 input_cols = list(filter(lambda x: 'c1_c0' not in x, clean_and_flat.columns.values))
 print input_cols
@@ -119,7 +149,7 @@ print InputDF.tail(10)
 print "InputDF ..."
 print TargetDF.tail(10)
 print "TargetDF ..."
-corrs = TargetDF.corr()
+#corrs = TargetDF.corr()
 
 num_stocks = len(TargetDF.columns)
 
