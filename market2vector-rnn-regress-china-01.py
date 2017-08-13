@@ -167,11 +167,27 @@ num_features = len(InputDF.columns)
 print "*" * 50, "Training a rnn network", "*" * 50
 num_features = len(InputDF.columns)
 
-train = (InputDF[:-test_size].values, TargetDF[:-test_size].values)
-val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
+#train = (InputDF[:-test_size].values, TargetDF[:-test_size].values)
+#val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
 
+used_size = 1000
+#train = (InputDF[-used_size:].values, TargetDF[-used_size:].values)
+#val = (InputDF[-test_size:].values, TargetDF[-test_size:].values)
+# 生成数据
+train_X, train_y =InputDF[-used_size:].values, TargetDF[-used_size:].values
+test_X, test_y = InputDF[-test_size:].values, TargetDF[-test_size:].values #TODO，
+# https://github.com/XRayCheng/tensorflow_iris_fix
+print "--------------------------------------------"
+train_X = train_X.astype(np.float32)
+train_y = train_y.astype(np.float32)
+test_X = test_X.astype(np.float32)
+test_y = test_y.astype(np.float32)
+print np.shape(train_X),np.shape(train_y)
+
+
+print InputDF[-used_size:].tail(10)
 print np.shape(TargetDF[-test_size:].values)
-print "Data count:",len(train[0])  # 3300 个股票日？ 股票没有那么多,500个
+print "Data count:",len(train_X)  # 3300 个股票日？ 股票没有那么多,500个
 print "Feather count:", num_features
 num_stocks = len(TargetDF.columns)
 print "Stocks count:", num_stocks
@@ -186,8 +202,8 @@ NUM_LAYERS = 2
 BATCH_SIZE = 25
 NUM_EPOCHS = 200  # 200
 lr = 0.0003
-NUM_TRAIN_BATCHES = int(len(train[0]) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
-NUM_VAL_BATCHES = int(len(val[1]) / BATCH_SIZE)
+NUM_TRAIN_BATCHES = int(len(train_X) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
+NUM_VAL_BATCHES = int(len(test_X) / BATCH_SIZE)
 ATTN_LENGTH = 10
 beta = 0
 
@@ -248,16 +264,6 @@ def lstm_model(X, y):
 from tensorflow.contrib.learn.python.learn.estimators.estimator import SKCompat
 learn = tf.contrib.learn
 
-# 生成数据
-train_X, train_y = InputDF[:-test_size].values,TargetDF[:-test_size].values
-test_X, test_y = InputDF[-test_size:].values,TargetDF[-test_size:].values
-# https://github.com/XRayCheng/tensorflow_iris_fix
-print "--------------------------------------------"
-train_X = train_X.astype(np.float32)
-train_y = train_y.astype(np.float32)
-test_X = test_X.astype(np.float32)
-test_y = test_y.astype(np.float32)
-print np.shape(train_X),np.shape(train_y)
 
 #print tf.reshape(train_y, [-1])
 start = datetime.datetime.now()
@@ -283,6 +289,7 @@ regressor = SKCompat(learn.Estimator(model_fn=lstm_model, model_dir="Models/mode
 #                                              num_epochs=1000)
 regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= (NUM_TRAIN_BATCHES/BATCH_SIZE) * NUM_EPOCHS )  # steps=train_labels.shape[0]/batch_size * epochs,
 
+#http://blog.mdda.net/ai/2017/02/25/estimator-input-fn 新旧接口之不同
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
 # 计算预测值
 print "----------fit over,to predict------------"
@@ -318,4 +325,3 @@ conn.close()
 end = datetime.datetime.now()
 print "*" * 20, "Train over", "*" * 20
 print end
-
