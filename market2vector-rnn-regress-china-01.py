@@ -99,7 +99,6 @@ def process(ticker):
     global Final,counter,counter_lock
     #Final = Final.append(Res)
     counter_lock.acquire()  # 当需要独占counter资源时，必须先锁定
-    print Res.head(10)
     Final = Final.append(Res)
     counter += 1
     #print (counter % 5 == 1) and "get counter:%s" % (counter) or ""
@@ -121,8 +120,6 @@ print "load ticker from db time:", end - begin
 #print Final.index
 print "-" * 20, "New Muti-stock table", "-" * 20
 
-print Final.head(10)
-print Final.tail(10)
 "-----------------------------------------------------------------------------------------------------------------------"
 pivot_columns = Final.columns[:-1]
 # P = Final.pivot_table(index=Final.index,columns='ticker',values=pivot_columns) # Make a pivot table from the data
