@@ -208,7 +208,7 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 RNN_HIDDEN_SIZE = 100
 NUM_LAYERS = 2
 BATCH_SIZE = 25
-NUM_EPOCHS = 1  # 200
+NUM_EPOCHS = 200  # 200
 lr = 0.001
 NUM_TRAIN_BATCHES = int(len(train_X) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(test_X) / BATCH_SIZE)
