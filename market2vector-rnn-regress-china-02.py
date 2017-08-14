@@ -107,10 +107,12 @@ def process(ticker):
 
 begin = datetime.datetime.now()
 tickers = getAllStockSaved()
-print("tickers count:",len(tickers),len(tickers.name[:-1]))
-print tickers.name[:-1]
+
 pool = ThreadPool(8)  # 4
-pool.map(process,tickers.name[:-1]) #predict table skip
+if tickers.name.last_valid_index() == "predict":
+    pool.map(process,tickers.name[:-1]) #predict table skip
+else:
+    pool.map(process, tickers.name)  # predict table skip
 pool.close()
 pool.join()
 end = datetime.datetime.now()
@@ -191,7 +193,7 @@ test_X = test_X.astype(np.float32)
 test_y = test_y.astype(np.float32)
 
 print np.shape(train_X),np.shape(train_y)
-print "Train Set <X:y> shape",
+print "Train Set <X:y> shape"
 num_stocks = len(TargetDF.columns)
 print "Data count:",len(train_X)  # 3300 个股票日？ 股票没有那么多,500个
 print "Feather count:", num_features
@@ -206,7 +208,7 @@ from tensorflow.contrib.layers.python.layers.initializers import xavier_initiali
 RNN_HIDDEN_SIZE = 100
 NUM_LAYERS = 2
 BATCH_SIZE = 25
-NUM_EPOCHS = 100  # 200
+NUM_EPOCHS = 1  # 200
 lr = 0.001
 NUM_TRAIN_BATCHES = int(len(train_X) / BATCH_SIZE)  # 每个epoch的批次数量 ， BATCH_SIZE相当于前进步常，其总数为66
 NUM_VAL_BATCHES = int(len(test_X) / BATCH_SIZE)
@@ -236,12 +238,24 @@ def makeGRUCells():
 def lstm_model(X, y):
     cell =  makeGRUCells()
     #cell = tf.contrib.rnn.MultiRNNCell([LstmCell() for _ in range(NUM_LAYERS)])
+    '''
     output, _ = tf.nn.dynamic_rnn(
                                   cell,
                                   inputs=tf.expand_dims(X, -1),
                                   dtype=tf.float32,
                                   time_major=False
                                   )
+    '''
+    print type(X)
+    split_inputs = tf.reshape(X, shape=[1, BATCH_SIZE, num_features],name="reshape_l1")  # Each item in the batch is a time step, iterate through them
+    print split_inputs
+    split_inputs = tf.unstack(split_inputs, axis=1, name="unpack_l1")
+    output, _ = tf.nn.static_rnn(cell,                                                  #收敛的好慢 相比自己构造层次
+                                 inputs=split_inputs,                                           #这个输入是一个list，len（list）= 步长 list[0].shape=[batch,input] ?
+                                 dtype=tf.float32
+                                 )
+
+
     #output = tf.reshape(output, [-1, RNN_HIDDEN_SIZE])
     output = tf.transpose(output, [1, 0, 2])
     print "imput0 :",X
@@ -301,26 +315,26 @@ regressor.fit(train_X, train_y,batch_size=BATCH_SIZE,steps= NUM_TRAIN_BATCHES * 
 #regressor.fit(train_X, train_y,batch_size=50,steps=10000, monitors=[validation_monitor])
 # 计算预测值
 print "----------fit over,to predict------------"
-predicted = [[pred] for pred in regressor.predict(test_X)]
+#predicted = [[pred] for pred in regressor.predict(test_X)]
 #print predicted
 # 计算MS
-print "----------predict over,to rmse------------"
-rmse = np.sqrt(((predicted - test_y) ** 2).mean(axis=0))
-print type(rmse),np.shape(rmse)
+#print "----------predict over,to rmse------------"
+#rmse = np.sqrt(((predicted - test_y) ** 2).mean(axis=0))
+#print type(rmse),np.shape(rmse)
 #print("Mean Square Error is:%f" % rmse[0])
 print "-----------------------test -------------------------"
 #print np.shape(test_X),test_X
-print np.shape(test_X[-1:])
+print np.shape(test_X[-BATCH_SIZE:])
+
 print "--------------------- predict -----------------------"
-p = regressor.predict(test_X[-1:])
+p = regressor.predict(test_X[-BATCH_SIZE:])
 print np.shape(p)
 print np.sort(p)
 
 
-
 from datetime import datetime as dt
 date = clean_and_flat.index[-1]
-df = pd.DataFrame(p,index=[date],columns=target_cols)
+df = pd.DataFrame(p[-1:],index=[date],columns=target_cols)
 df.index.name = "date"
 print df
 conn = sqlite3.connect('History.db', check_same_thread=False)
